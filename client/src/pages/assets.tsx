@@ -1,5 +1,5 @@
 import Layout from "@/components/Layout";
-import { assets } from "@/lib/mockData";
+import { assets, inventory } from "@/lib/mockData";
 import { 
   Card, 
   CardContent, 
@@ -19,7 +19,8 @@ import {
   Activity, 
   Calendar,
   Image as ImageIcon,
-  Edit2
+  Edit2,
+  Wrench
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -30,6 +31,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
 
 export default function Assets() {
   return (
@@ -125,8 +131,8 @@ export default function Assets() {
                 </CardHeader>
                 
                 <CardContent className="flex-1 flex flex-col justify-end pb-4 pt-2">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end">
-                    <div className="space-y-1.5 col-span-2 md:col-span-2">
+                  <div className="flex flex-wrap gap-4 items-end justify-between">
+                    <div className="space-y-1.5 flex-1 min-w-[200px]">
                       <div className="flex items-center justify-between text-sm">
                         <span className="flex items-center text-muted-foreground">
                           <Activity className="mr-2 size-4 opacity-70" /> System Health
@@ -146,11 +152,53 @@ export default function Assets() {
                       )} />
                     </div>
                     
-                    <div className="space-y-1 md:col-start-4 text-right">
-                      <p className="text-xs text-muted-foreground flex items-center justify-end">
-                        <Calendar className="mr-1.5 size-3.5 opacity-70" /> Last Service
-                      </p>
-                      <p className="text-sm font-medium">{asset.lastService}</p>
+                    <div className="flex gap-4 text-right">
+                      {asset.partsUsed && asset.partsUsed.length > 0 && (
+                        <div className="space-y-1 text-left mr-4">
+                          <p className="text-xs text-muted-foreground flex items-center">
+                            <Wrench className="mr-1.5 size-3.5 opacity-70" /> Parts Used
+                          </p>
+                          <HoverCard>
+                            <HoverCardTrigger asChild>
+                              <Button variant="link" className="h-auto p-0 text-sm font-medium">
+                                {asset.partsUsed.length} Part(s)
+                              </Button>
+                            </HoverCardTrigger>
+                            <HoverCardContent className="w-80">
+                              <div className="space-y-2">
+                                <h4 className="text-sm font-semibold">Common Parts</h4>
+                                <div className="text-sm">
+                                  {asset.partsUsed.map(partId => {
+                                    const part = inventory.find(p => p.id === partId);
+                                    const isLow = part && part.stock < part.minStock;
+                                    return (
+                                      <div key={partId} className="flex justify-between items-center py-2 border-b last:border-0">
+                                        <div>
+                                          <div className="font-medium">{part?.name || partId}</div>
+                                          <div className="text-xs text-muted-foreground">{partId}</div>
+                                        </div>
+                                        <div className="text-right">
+                                          <div className={cn("text-xs font-medium", isLow ? "text-red-500" : "text-green-600")}>
+                                            {part ? `${part.stock} ${part.unit}` : 'Unknown'}
+                                          </div>
+                                          <div className="text-[10px] text-muted-foreground">In Stock</div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </HoverCardContent>
+                          </HoverCard>
+                        </div>
+                      )}
+
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground flex items-center justify-end">
+                          <Calendar className="mr-1.5 size-3.5 opacity-70" /> Last Service
+                        </p>
+                        <p className="text-sm font-medium">{asset.lastService}</p>
+                      </div>
                     </div>
                   </div>
                 </CardContent>

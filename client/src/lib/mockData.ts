@@ -8,11 +8,11 @@ export const users = [
 ];
 
 export const assets = [
-  { id: "A-101", name: "Hydraulic Press #4", location: "Building A", status: "Operational", health: 98, lastService: "2023-10-15" },
-  { id: "A-102", name: "Conveyor Belt Main", location: "Building A", status: "Maintenance", health: 45, lastService: "2023-11-01" },
-  { id: "A-201", name: "Cooling Tower B", location: "Roof", status: "Operational", health: 92, lastService: "2023-09-20" },
-  { id: "A-205", name: "Generator Backup", location: "Basement", status: "Down", health: 0, lastService: "2023-08-10" },
-  { id: "A-301", name: "CNC Machine X1", location: "Workshop", status: "Operational", health: 88, lastService: "2023-10-25" },
+  { id: "A-101", name: "Hydraulic Press #4", location: "Building A", status: "Operational", health: 98, lastService: "2023-10-15", partsUsed: ["PART-002", "PART-003"] },
+  { id: "A-102", name: "Conveyor Belt Main", location: "Building A", status: "Maintenance", health: 45, lastService: "2023-11-01", partsUsed: ["PART-004", "PART-001"] },
+  { id: "A-201", name: "Cooling Tower B", location: "Roof", status: "Operational", health: 92, lastService: "2023-09-20", partsUsed: ["PART-001"] },
+  { id: "A-205", name: "Generator Backup", location: "Basement", status: "Down", health: 0, lastService: "2023-08-10", partsUsed: ["PART-005", "PART-002", "PART-003"] },
+  { id: "A-301", name: "CNC Machine X1", location: "Workshop", status: "Operational", health: 88, lastService: "2023-10-25", partsUsed: ["PART-002"] },
 ];
 
 export const jobs = [
@@ -24,11 +24,11 @@ export const jobs = [
 ];
 
 export const inventory = [
-  { id: "PART-001", name: "Filter Type A", category: "Consumables", stock: 45, minStock: 10, unit: "pcs", location: "Shelf A1", lastUsed: "2023-11-10", lastStockTaken: "2023-11-01" },
-  { id: "PART-002", name: "Hydraulic Fluid", category: "Fluids", stock: 120, minStock: 50, unit: "L", location: "Cabinet B", lastUsed: "2023-11-12", lastStockTaken: "2023-10-25" },
-  { id: "PART-003", name: "Bearing 6204", category: "Spares", stock: 4, minStock: 10, unit: "pcs", location: "Shelf C3", lastUsed: "2023-11-05", lastStockTaken: "2023-11-05" },
-  { id: "PART-004", name: "V-Belt B52", category: "Spares", stock: 8, minStock: 5, unit: "pcs", location: "Shelf C4", lastUsed: "2023-10-28", lastStockTaken: "2023-11-01" },
-  { id: "PART-005", name: "Safety Gloves", category: "PPE", stock: 200, minStock: 50, unit: "pairs", location: "Locker 1", lastUsed: "2023-11-14", lastStockTaken: "2023-11-10" },
+  { id: "PART-001", name: "Filter Type A", category: "Consumables", stock: 45, minStock: 10, unit: "pcs", location: "Shelf A1", lastUsed: "2023-11-10", lastStockTaken: "2023-11-01", usedOnAssets: ["A-102", "A-201"] },
+  { id: "PART-002", name: "Hydraulic Fluid", category: "Fluids", stock: 120, minStock: 50, unit: "L", location: "Cabinet B", lastUsed: "2023-11-12", lastStockTaken: "2023-10-25", usedOnAssets: ["A-101", "A-205", "A-301"] },
+  { id: "PART-003", name: "Bearing 6204", category: "Spares", stock: 4, minStock: 10, unit: "pcs", location: "Shelf C3", lastUsed: "2023-11-05", lastStockTaken: "2023-11-05", usedOnAssets: ["A-101", "A-205"] },
+  { id: "PART-004", name: "V-Belt B52", category: "Spares", stock: 8, minStock: 5, unit: "pcs", location: "Shelf C4", lastUsed: "2023-10-28", lastStockTaken: "2023-11-01", usedOnAssets: ["A-102"] },
+  { id: "PART-005", name: "Safety Gloves", category: "PPE", stock: 200, minStock: 50, unit: "pairs", location: "Locker 1", lastUsed: "2023-11-14", lastStockTaken: "2023-11-10", usedOnAssets: ["A-205"] },
 ];
 
 export const templates = [

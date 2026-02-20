@@ -1,5 +1,5 @@
 import Layout from "@/components/Layout";
-import { inventory } from "@/lib/mockData";
+import { inventory, assets } from "@/lib/mockData";
 import { 
   Table, 
   TableBody, 
@@ -30,6 +30,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useState } from "react";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
 
 export default function Inventory() {
   const [filterLowStock, setFilterLowStock] = useState(false);
@@ -116,6 +121,7 @@ export default function Inventory() {
               <TableHead>Location</TableHead>
               <TableHead>Stock Level</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Used On</TableHead>
               <TableHead>Last Used</TableHead>
               <TableHead>Last Stock Taken</TableHead>
               <TableHead className="text-right">Actions</TableHead>
@@ -159,6 +165,35 @@ export default function Inventory() {
                       <Badge variant="destructive" className="text-xs">Low Stock</Badge>
                     ) : (
                       <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">In Stock</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="w-[180px]">
+                    {item.usedOnAssets && item.usedOnAssets.length > 0 ? (
+                      <HoverCard>
+                        <HoverCardTrigger asChild>
+                          <Button variant="link" className="h-auto p-0 text-xs">
+                            {item.usedOnAssets.length} Asset(s)
+                          </Button>
+                        </HoverCardTrigger>
+                        <HoverCardContent className="w-80">
+                          <div className="space-y-2">
+                            <h4 className="text-sm font-semibold">Used on Assets</h4>
+                            <div className="text-sm">
+                              {item.usedOnAssets.map(assetId => {
+                                const asset = assets.find(a => a.id === assetId);
+                                return (
+                                  <div key={assetId} className="flex justify-between items-center py-1 border-b last:border-0">
+                                    <span>{asset?.name || assetId}</span>
+                                    <span className="text-xs text-muted-foreground">{assetId}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </HoverCardContent>
+                      </HoverCard>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">None</span>
                     )}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">{item.lastUsed}</TableCell>
