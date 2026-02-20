@@ -12,8 +12,23 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Search, Plus, AlertCircle, ShoppingCart } from "lucide-react";
+import { 
+  Search, 
+  Plus, 
+  AlertCircle, 
+  ShoppingCart,
+  Image as ImageIcon,
+  MoreHorizontal
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function Inventory() {
   return (
@@ -76,6 +91,7 @@ export default function Inventory() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-[60px]"></TableHead>
               <TableHead className="w-[100px]">Part #</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Category</TableHead>
@@ -92,6 +108,14 @@ export default function Inventory() {
 
               return (
                 <TableRow key={item.id}>
+                  <TableCell>
+                    <div className="size-10 rounded bg-muted/50 border flex items-center justify-center relative group overflow-hidden cursor-pointer">
+                      <ImageIcon className="size-4 text-muted-foreground/50" />
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <Plus className="size-3 text-white" />
+                      </div>
+                    </div>
+                  </TableCell>
                   <TableCell className="font-medium font-mono text-xs text-muted-foreground">
                     {item.id}
                   </TableCell>
@@ -101,7 +125,7 @@ export default function Inventory() {
                   <TableCell className="w-[200px]">
                     <div className="space-y-1">
                       <div className="flex justify-between text-xs">
-                        <span>{item.stock} {item.unit}</span>
+                        <span className="font-medium">{item.stock} {item.unit}</span>
                         <span className="text-muted-foreground">Min: {item.minStock}</span>
                       </div>
                       <Progress value={stockPercentage} className={cn(
@@ -118,7 +142,22 @@ export default function Inventory() {
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="sm">Edit</Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreHorizontal className="size-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Item Actions</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem>Edit Item</DropdownMenuItem>
+                        <DropdownMenuItem>Upload Image</DropdownMenuItem>
+                        <DropdownMenuItem>Adjust Stock</DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem>Order More</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableCell>
                 </TableRow>
               );

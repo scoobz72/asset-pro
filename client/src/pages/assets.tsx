@@ -6,7 +6,6 @@ import {
   CardHeader, 
   CardTitle, 
   CardDescription,
-  CardFooter
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,9 +17,19 @@ import {
   MoreHorizontal, 
   MapPin, 
   Activity, 
-  Calendar 
+  Calendar,
+  Image as ImageIcon,
+  Edit2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function Assets() {
   return (
@@ -45,57 +54,108 @@ export default function Assets() {
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div className="flex flex-col gap-4">
         {assets.map((asset) => (
           <Card key={asset.id} className="overflow-hidden transition-all hover:shadow-md">
-            <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-              <div>
-                <CardTitle className="text-lg font-semibold">{asset.name}</CardTitle>
-                <CardDescription className="font-mono text-xs mt-1">{asset.id}</CardDescription>
-              </div>
-              <Badge variant={asset.status === "Operational" ? "default" : "destructive"} className={cn(
-                asset.status === "Operational" ? "bg-green-500 hover:bg-green-600" : 
-                asset.status === "Maintenance" ? "bg-yellow-500 hover:bg-yellow-600" :
-                "bg-red-500 hover:bg-red-600"
-              )}>
-                {asset.status}
-              </Badge>
-            </CardHeader>
-            <CardContent className="pb-2">
-              <div className="grid gap-4 mt-2">
-                <div className="flex items-center text-sm text-muted-foreground">
-                  <MapPin className="mr-2 size-4 opacity-70" />
-                  {asset.location}
+            <div className="flex flex-col sm:flex-row">
+              {/* Asset Image / Placeholder */}
+              <div className="sm:w-48 h-48 sm:h-auto bg-muted/50 flex flex-col items-center justify-center border-r relative group">
+                <ImageIcon className="size-12 text-muted-foreground/30" />
+                <span className="text-xs text-muted-foreground mt-2 font-medium">No Image</span>
+                
+                {/* Upload overlay on hover */}
+                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <Button variant="secondary" size="sm" className="h-8">
+                    <Plus className="mr-2 size-3" /> Upload
+                  </Button>
                 </div>
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="flex items-center text-muted-foreground">
-                      <Activity className="mr-2 size-4 opacity-70" /> Health
-                    </span>
-                    <span className={cn(
-                      "font-medium",
-                      asset.health > 90 ? "text-green-600" :
-                      asset.health > 70 ? "text-yellow-600" :
-                      "text-red-600"
-                    )}>{asset.health}%</span>
+              </div>
+              
+              <div className="flex-1 flex flex-col">
+                <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
+                  <div>
+                    <div className="flex items-center gap-3">
+                      <CardTitle className="text-xl font-bold">{asset.name}</CardTitle>
+                      <Badge variant="outline" className="font-mono text-xs font-normal">
+                        {asset.id}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
+                       <MapPin className="size-4 opacity-70" />
+                       <span className="font-medium text-foreground">{asset.location}</span>
+                       <Button variant="ghost" size="sm" className="h-6 px-2 ml-1 text-xs">
+                         Change
+                       </Button>
+                    </div>
                   </div>
-                  <Progress value={asset.health} className={cn(
-                    "h-2",
-                    "[&>div]:bg-green-500",
-                    asset.health < 90 && "[&>div]:bg-yellow-500",
-                    asset.health < 70 && "[&>div]:bg-red-500"
-                  )} />
-                </div>
-                <div className="flex items-center text-sm text-muted-foreground">
-                  <Calendar className="mr-2 size-4 opacity-70" />
-                  Last Service: {asset.lastService}
-                </div>
+                  
+                  <div className="flex items-center gap-3">
+                    <Badge variant={asset.status === "Operational" ? "default" : "destructive"} className={cn(
+                      asset.status === "Operational" ? "bg-green-500 hover:bg-green-600" : 
+                      asset.status === "Maintenance" ? "bg-yellow-500 hover:bg-yellow-600" :
+                      "bg-red-500 hover:bg-red-600"
+                    )}>
+                      {asset.status}
+                    </Badge>
+                    
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreHorizontal className="size-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Asset Actions</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem>
+                           <Edit2 className="mr-2 size-4" /> Edit Details
+                        </DropdownMenuItem>
+                        <DropdownMenuItem>
+                           <MapPin className="mr-2 size-4" /> Move Location
+                        </DropdownMenuItem>
+                        <DropdownMenuItem>
+                           <ImageIcon className="mr-2 size-4" /> Update Photo
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem>Schedule Maintenance</DropdownMenuItem>
+                        <DropdownMenuItem>View History</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </CardHeader>
+                
+                <CardContent className="flex-1 flex flex-col justify-end pb-4 pt-2">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end">
+                    <div className="space-y-1.5 col-span-2 md:col-span-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="flex items-center text-muted-foreground">
+                          <Activity className="mr-2 size-4 opacity-70" /> System Health
+                        </span>
+                        <span className={cn(
+                          "font-bold",
+                          asset.health > 90 ? "text-green-600" :
+                          asset.health > 70 ? "text-yellow-600" :
+                          "text-red-600"
+                        )}>{asset.health}%</span>
+                      </div>
+                      <Progress value={asset.health} className={cn(
+                        "h-2",
+                        "[&>div]:bg-green-500",
+                        asset.health < 90 && "[&>div]:bg-yellow-500",
+                        asset.health < 70 && "[&>div]:bg-red-500"
+                      )} />
+                    </div>
+                    
+                    <div className="space-y-1 md:col-start-4 text-right">
+                      <p className="text-xs text-muted-foreground flex items-center justify-end">
+                        <Calendar className="mr-1.5 size-3.5 opacity-70" /> Last Service
+                      </p>
+                      <p className="text-sm font-medium">{asset.lastService}</p>
+                    </div>
+                  </div>
+                </CardContent>
               </div>
-            </CardContent>
-            <CardFooter className="bg-muted/10 p-4 flex justify-between items-center border-t">
-              <Button variant="ghost" size="sm">History</Button>
-              <Button variant="outline" size="sm">View Details</Button>
-            </CardFooter>
+            </div>
           </Card>
         ))}
       </div>
