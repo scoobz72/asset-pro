@@ -126,10 +126,74 @@ export default function Audits() {
             </DialogContent>
           </Dialog>
 
-          <Button>
-            <Plus className="mr-2 size-4" />
-            Schedule Audit
-          </Button>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 size-4" />
+                Schedule Audit
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>Schedule Area Audit</DialogTitle>
+                <DialogDescription>
+                  Create a bulk audit task for a specific location or production line to verify all assets within it.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="auditType">Audit Scope</Label>
+                  <Select defaultValue="location">
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select scope..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="location">By Location (Building/Area)</SelectItem>
+                      <SelectItem value="line">By Production Line</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="location">Target Area</Label>
+                  <Select>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select area to audit..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="b-a">Building A</SelectItem>
+                      <SelectItem value="b-b">Building B</SelectItem>
+                      <SelectItem value="roof">Roof</SelectItem>
+                      <SelectItem value="base">Basement</SelectItem>
+                      <SelectItem value="work">Workshop</SelectItem>
+                      <SelectItem value="line-1">Line 1 (Packaging)</SelectItem>
+                      <SelectItem value="line-2">Line 2 (Assembly)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="assignee">Assign Auditor</Label>
+                  <Select>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select team member..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">John Doe</SelectItem>
+                      <SelectItem value="2">Sarah Smith</SelectItem>
+                      <SelectItem value="3">Mike Johnson</SelectItem>
+                      <SelectItem value="4">Emily Davis</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="date">Scheduled Date</Label>
+                  <Input type="date" id="date" />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="submit">Schedule Bulk Audit</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
