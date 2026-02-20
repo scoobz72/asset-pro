@@ -29,8 +29,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useState } from "react";
 
 export default function Inventory() {
+  const [filterLowStock, setFilterLowStock] = useState(false);
+  
+  const displayedInventory = filterLowStock 
+    ? inventory.filter(i => i.stock < i.minStock)
+    : inventory;
+
   return (
     <Layout>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -60,13 +67,19 @@ export default function Inventory() {
             <h3 className="text-2xl font-bold">{inventory.reduce((acc, item) => acc + item.stock, 0)}</h3>
           </div>
         </div>
-        <div className="bg-card p-4 rounded-lg border shadow-sm flex items-center gap-4">
+        <div 
+          className={cn(
+            "bg-card p-4 rounded-lg border shadow-sm flex items-center gap-4 cursor-pointer transition-colors hover:bg-muted/50",
+            filterLowStock && "border-red-500 ring-1 ring-red-500 bg-red-50/50 dark:bg-red-950/20"
+          )}
+          onClick={() => setFilterLowStock(!filterLowStock)}
+        >
           <div className="p-3 bg-red-100 rounded-full text-red-600">
             <AlertCircle className="size-6" />
           </div>
           <div>
             <p className="text-sm font-medium text-muted-foreground">Low Stock Alerts</p>
-            <h3 className="text-2xl font-bold">{inventory.filter(i => i.stock < i.minStock).length}</h3>
+            <h3 className="text-2xl font-bold text-red-600 dark:text-red-500">{inventory.filter(i => i.stock < i.minStock).length}</h3>
           </div>
         </div>
         <div className="bg-card p-4 rounded-lg border shadow-sm flex items-center gap-4">
@@ -85,9 +98,14 @@ export default function Inventory() {
           <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
           <Input placeholder="Search inventory..." className="pl-9" />
         </div>
+        {filterLowStock && (
+          <Button variant="ghost" onClick={() => setFilterLowStock(false)} className="text-sm text-muted-foreground h-9">
+            Clear filter
+          </Button>
+        )}
       </div>
 
-      <div className="rounded-md border bg-card">
+      <div className="rounded-md border bg-card overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -98,11 +116,13 @@ export default function Inventory() {
               <TableHead>Location</TableHead>
               <TableHead>Stock Level</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Last Used</TableHead>
+              <TableHead>Last Stock Taken</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {inventory.map((item) => {
+            {displayedInventory.map((item) => {
               const stockPercentage = Math.min((item.stock / (item.minStock * 3)) * 100, 100);
               const isLow = item.stock < item.minStock;
 
@@ -122,7 +142,7 @@ export default function Inventory() {
                   <TableCell className="font-medium">{item.name}</TableCell>
                   <TableCell>{item.category}</TableCell>
                   <TableCell>{item.location}</TableCell>
-                  <TableCell className="w-[200px]">
+                  <TableCell className="w-[180px]">
                     <div className="space-y-1">
                       <div className="flex justify-between text-xs">
                         <span className="font-medium">{item.stock} {item.unit}</span>
@@ -141,6 +161,8 @@ export default function Inventory() {
                       <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">In Stock</Badge>
                     )}
                   </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{item.lastUsed}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{item.lastStockTaken}</TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
