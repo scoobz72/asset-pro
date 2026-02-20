@@ -3,6 +3,7 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useState } from "react";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import Jobs from "@/pages/jobs";
@@ -16,6 +17,7 @@ import PurchaseOrders from "@/pages/purchase-orders";
 import Calendar from "@/pages/calendar";
 import Team from "@/pages/team";
 import Reports from "@/pages/reports";
+import Auth from "@/pages/auth";
 
 function Router() {
   return (
@@ -44,11 +46,17 @@ function Router() {
 }
 
 function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        <Router />
+        {!isAuthenticated ? (
+          <Auth onLogin={() => setIsAuthenticated(true)} />
+        ) : (
+          <Router />
+        )}
       </TooltipProvider>
     </QueryClientProvider>
   );
