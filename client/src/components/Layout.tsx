@@ -13,7 +13,8 @@ import {
   Bell,
   Search,
   ChevronDown,
-  FileSignature
+  FileSignature,
+  ArrowRightLeft
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +36,7 @@ const navigation = [
   { name: 'Templates', href: '/templates', icon: FileSignature },
   { name: 'Assets', href: '/assets', icon: Box },
   { name: 'Inventory', href: '/inventory', icon: Wrench },
+  { name: 'Transactions', href: '/transactions', icon: ArrowRightLeft },
   { name: 'Calendar', href: '/calendar', icon: CalendarIcon },
   { name: 'Team', href: '/team', icon: Users },
   { name: 'Reports', href: '/reports', icon: BarChart3 },
