@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -18,8 +18,9 @@ import Calendar from "@/pages/calendar";
 import Team from "@/pages/team";
 import Reports from "@/pages/reports";
 import Auth from "@/pages/auth";
+import Settings from "@/pages/settings";
 
-function Router() {
+function Router({ defaultLandingPage, setDefaultLandingPage }: any) {
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
@@ -34,12 +35,12 @@ function Router() {
       <Route path="/calendar" component={Calendar} />
       <Route path="/team" component={Team} />
       <Route path="/reports" component={Reports} />
-      <Route path="/settings" component={() => (
-        <div className="p-8">
-          <h1 className="text-2xl font-bold">Settings</h1>
-          <p className="text-muted-foreground">Placeholder for settings page.</p>
-        </div>
-      )} />
+      <Route path="/settings">
+        <Settings 
+          defaultLandingPage={defaultLandingPage} 
+          setDefaultLandingPage={setDefaultLandingPage} 
+        />
+      </Route>
       <Route component={NotFound} />
     </Switch>
   );
@@ -47,15 +48,25 @@ function Router() {
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [defaultLandingPage, setDefaultLandingPage] = useState("/");
+  const [, setLocation] = useLocation();
+
+  const handleLogin = () => {
+    setIsAuthenticated(true);
+    setLocation(defaultLandingPage);
+  };
 
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
         {!isAuthenticated ? (
-          <Auth onLogin={() => setIsAuthenticated(true)} />
+          <Auth onLogin={handleLogin} />
         ) : (
-          <Router />
+          <Router 
+            defaultLandingPage={defaultLandingPage}
+            setDefaultLandingPage={setDefaultLandingPage}
+          />
         )}
       </TooltipProvider>
     </QueryClientProvider>
