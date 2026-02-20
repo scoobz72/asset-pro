@@ -20,45 +20,15 @@ import {
   ArrowUpRight, 
   ArrowDownRight,
   Package,
-  Activity
+  Activity,
+  Calendar as CalendarIcon,
+  Wrench,
+  AlertOctagon
 } from "lucide-react";
 import { jobs, assets, inventory } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
-
-const stats = [
-  { 
-    title: "Open Jobs", 
-    value: jobs.filter(j => j.status !== "Completed").length, 
-    change: "+2.5%", 
-    trend: "up",
-    icon: Clock,
-    color: "text-blue-500"
-  },
-  { 
-    title: "Critical Assets Down", 
-    value: assets.filter(a => a.status === "Down").length, 
-    change: "-1", 
-    trend: "down",
-    icon: AlertTriangle,
-    color: "text-destructive"
-  },
-  { 
-    title: "Low Stock Items", 
-    value: inventory.filter(i => i.stock < i.minStock).length, 
-    change: "+2", 
-    trend: "up",
-    icon: Package,
-    color: "text-orange-500"
-  },
-  { 
-    title: "Completion Rate", 
-    value: "94%", 
-    change: "+1.2%", 
-    trend: "up",
-    icon: CheckCircle2,
-    color: "text-green-500"
-  },
-];
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useState } from "react";
 
 const chartData = [
   { name: 'Mon', completed: 4, opened: 6 },
@@ -71,20 +41,85 @@ const chartData = [
 ];
 
 export default function Dashboard() {
+  const [dateFilter, setDateFilter] = useState("7days");
+
+  const stats = [
+    { 
+      title: "Open Jobs", 
+      value: jobs.filter(j => j.status !== "Completed").length, 
+      change: "+2.5%", 
+      trend: "up",
+      icon: Clock,
+      color: "text-blue-500"
+    },
+    { 
+      title: "MTBF", 
+      value: "412 hrs", 
+      change: "+15 hrs", 
+      trend: "up",
+      icon: Wrench,
+      color: "text-indigo-500"
+    },
+    { 
+      title: "Critical Assets Down", 
+      value: assets.filter(a => a.status === "Down").length, 
+      change: "-1", 
+      trend: "down",
+      icon: AlertTriangle,
+      color: "text-destructive"
+    },
+    { 
+      title: "Low Stock Items", 
+      value: inventory.filter(i => i.stock < i.minStock).length, 
+      change: "+2", 
+      trend: "up",
+      icon: Package,
+      color: "text-orange-500"
+    },
+    { 
+      title: "Completion Rate", 
+      value: "94%", 
+      change: "+1.2%", 
+      trend: "up",
+      icon: CheckCircle2,
+      color: "text-green-500"
+    },
+  ];
+
+  const criticalAssets = assets.filter(a => a.status === "Down" || a.status === "Maintenance");
+  const lowStockItems = inventory.filter(i => i.stock < i.minStock);
+
   return (
     <Layout>
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground mt-1">Overview of maintenance operations.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 bg-background border rounded-md px-3 py-1 mr-2">
+            <CalendarIcon className="size-4 text-muted-foreground" />
+            <Select value={dateFilter} onValueChange={setDateFilter}>
+              <SelectTrigger className="w-[140px] border-0 h-8 focus:ring-0 px-1 shadow-none bg-transparent">
+                <SelectValue placeholder="Select period" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="today">Today</SelectItem>
+                <SelectItem value="yesterday">Yesterday</SelectItem>
+                <SelectItem value="7days">Last 7 Days</SelectItem>
+                <SelectItem value="30days">Last 30 Days</SelectItem>
+                <SelectItem value="thisMonth">This Month</SelectItem>
+                <SelectItem value="lastMonth">Last Month</SelectItem>
+                <SelectItem value="ytd">Year to Date</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <Button variant="outline">Download Report</Button>
           <Button>Create Job</Button>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5 mb-6">
         {stats.map((stat, index) => (
           <Card key={index} className="shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -104,18 +139,18 @@ export default function Dashboard() {
                 <span className={stat.trend === "up" ? "text-green-500" : "text-red-500"}>
                   {stat.change}
                 </span>
-                <span className="ml-1">from last month</span>
+                <span className="ml-1">vs prev period</span>
               </p>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7 mb-6">
         <Card className="col-span-4 shadow-sm">
           <CardHeader>
             <CardTitle>Job Completion Trend</CardTitle>
-            <CardDescription>Weekly overview of maintenance tasks.</CardDescription>
+            <CardDescription>Maintenance tasks over {dateFilter === "7days" ? "the last 7 days" : "the selected period"}.</CardDescription>
           </CardHeader>
           <CardContent className="pl-2">
             <ResponsiveContainer width="100%" height={350}>
@@ -145,40 +180,80 @@ export default function Dashboard() {
           </CardContent>
         </Card>
         
-        <Card className="col-span-3 shadow-sm">
-          <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>Latest updates from the team.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-8">
-              {jobs.slice(0, 5).map((job) => (
-                <div key={job.id} className="flex items-center">
-                  <div className={cn(
-                    "size-9 rounded-full flex items-center justify-center border",
-                    job.priority === "Critical" ? "bg-red-100 text-red-600 border-red-200" :
-                    job.priority === "High" ? "bg-orange-100 text-orange-600 border-orange-200" :
-                    "bg-blue-100 text-blue-600 border-blue-200"
-                  )}>
-                    <Activity className="size-4" />
-                  </div>
-                  <div className="ml-4 space-y-1">
-                    <p className="text-sm font-medium leading-none">{job.title}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {job.id} • {job.status}
-                    </p>
-                  </div>
-                  <div className="ml-auto font-medium">
-                    <Badge variant={job.status === "Completed" ? "default" : "outline"}>
-                      {job.priority}
-                    </Badge>
-                  </div>
+        <div className="col-span-3 space-y-4">
+          <Card className="shadow-sm">
+            <CardHeader className="py-4">
+              <CardTitle className="text-base flex items-center">
+                <AlertOctagon className="size-4 mr-2 text-destructive" />
+                Critical Asset Alerts
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4">
+              {criticalAssets.length > 0 ? (
+                <div className="space-y-4">
+                  {criticalAssets.map(asset => (
+                    <div key={asset.id} className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="size-8 rounded bg-destructive/10 text-destructive flex items-center justify-center font-bold text-xs">
+                          {asset.name.substring(0, 2)}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium leading-none">{asset.name}</p>
+                          <p className="text-xs text-muted-foreground mt-1">{asset.location}</p>
+                        </div>
+                      </div>
+                      <Badge variant="destructive" className="bg-red-500">{asset.status}</Badge>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+              ) : (
+                <div className="text-sm text-muted-foreground flex items-center justify-center py-4">
+                  <CheckCircle2 className="size-4 mr-2 text-green-500" />
+                  All critical assets are operational.
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-sm">
+            <CardHeader className="py-4">
+              <CardTitle className="text-base flex items-center">
+                <Package className="size-4 mr-2 text-orange-500" />
+                Low Stock Alerts
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pb-4">
+              {lowStockItems.length > 0 ? (
+                <div className="space-y-4">
+                  {lowStockItems.slice(0, 4).map(item => (
+                    <div key={item.id} className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="size-8 rounded bg-orange-100 text-orange-600 flex items-center justify-center">
+                          <Package className="size-4" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium leading-none">{item.name}</p>
+                          <p className="text-xs text-muted-foreground mt-1">{item.sku}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-orange-600">{item.stock} {item.unit}</p>
+                        <p className="text-[10px] text-muted-foreground">Min: {item.minStock}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground flex items-center justify-center py-4">
+                  <CheckCircle2 className="size-4 mr-2 text-green-500" />
+                  Inventory levels are optimal.
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </Layout>
   );
 }
+
