@@ -23,12 +23,19 @@ import {
   Activity,
   Calendar as CalendarIcon,
   Wrench,
-  AlertOctagon
+  AlertOctagon,
+  Mail,
+  Send
 } from "lucide-react";
 import { jobs, assets, inventory } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useState } from "react";
+import { useToast } from "@/hooks/use-toast";
 
 const chartData = [
   { name: 'Mon', completed: 4, opened: 6 },
@@ -42,6 +49,22 @@ const chartData = [
 
 export default function Dashboard() {
   const [dateFilter, setDateFilter] = useState("7days");
+  const [isEmailing, setIsEmailing] = useState(false);
+  const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
+  const { toast } = useToast();
+
+  const handleScheduleEmail = (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsEmailing(true);
+    setTimeout(() => {
+      setIsEmailing(false);
+      setIsEmailDialogOpen(false);
+      toast({
+        title: "Report Scheduled",
+        description: "Dashboard report has been scheduled successfully.",
+      });
+    }, 1000);
+  };
 
   const stats = [
     { 
@@ -114,7 +137,70 @@ export default function Dashboard() {
               </SelectContent>
             </Select>
           </div>
-          <Button variant="outline">Download Report</Button>
+          <Dialog open={isEmailDialogOpen} onOpenChange={setIsEmailDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <Mail className="size-4" />
+                Schedule Report
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>Schedule Dashboard Report</DialogTitle>
+                <DialogDescription>
+                  Set up automated email delivery for this dashboard view.
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleScheduleEmail} className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="recipients">Recipients (comma separated)</Label>
+                  <Input id="recipients" placeholder="team@company.com, manager@company.com" required />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="frequency">Frequency</Label>
+                  <Select defaultValue="weekly">
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select frequency" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="daily">Daily (8:00 AM)</SelectItem>
+                      <SelectItem value="weekly">Weekly (Monday 8:00 AM)</SelectItem>
+                      <SelectItem value="monthly">Monthly (1st of Month)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Include Sections</Label>
+                  <div className="space-y-2 border rounded-md p-3 bg-muted/20">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox id="inc-kpi" defaultChecked />
+                      <label htmlFor="inc-kpi" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Key Performance Indicators</label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox id="inc-charts" defaultChecked />
+                      <label htmlFor="inc-charts" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Trend Charts</label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox id="inc-alerts" defaultChecked />
+                      <label htmlFor="inc-alerts" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Critical Alerts & Low Stock</label>
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter className="mt-4">
+                  <Button type="button" variant="outline" onClick={() => setIsEmailDialogOpen(false)}>Cancel</Button>
+                  <Button type="submit" disabled={isEmailing}>
+                    {isEmailing ? "Saving..." : (
+                      <>
+                        <Send className="mr-2 size-4" />
+                        Schedule
+                      </>
+                    )}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+          <Button variant="outline">Download PDF</Button>
           <Button>Create Job</Button>
         </div>
       </div>
