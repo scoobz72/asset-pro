@@ -1,5 +1,5 @@
 import Layout from "@/components/Layout";
-import { inventory, assets } from "@/lib/mockData";
+import { inventory, assets, suppliers } from "@/lib/mockData";
 import { 
   Table, 
   TableBody, 
@@ -18,7 +18,8 @@ import {
   AlertCircle, 
   ShoppingCart,
   Image as ImageIcon,
-  MoreHorizontal
+  MoreHorizontal,
+  Building2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -121,6 +122,7 @@ export default function Inventory() {
               <TableHead>Location</TableHead>
               <TableHead>Stock Level</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Suppliers</TableHead>
               <TableHead>Used On</TableHead>
               <TableHead>Last Used</TableHead>
               <TableHead>Last Stock Taken</TableHead>
@@ -165,6 +167,45 @@ export default function Inventory() {
                       <Badge variant="destructive" className="text-xs">Low Stock</Badge>
                     ) : (
                       <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">In Stock</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {(item.primarySupplier || item.secondarySupplier) ? (
+                      <HoverCard>
+                        <HoverCardTrigger asChild>
+                          <Button variant="link" className="h-auto p-0 text-xs text-muted-foreground flex items-center">
+                            <Building2 className="mr-1 size-3" />
+                            {item.primarySupplier && item.secondarySupplier ? '2 Suppliers' : '1 Supplier'}
+                          </Button>
+                        </HoverCardTrigger>
+                        <HoverCardContent className="w-80">
+                          <div className="space-y-3">
+                            <h4 className="text-sm font-semibold">Approved Suppliers</h4>
+                            <div className="space-y-2">
+                              {item.primarySupplier && (
+                                <div className="border rounded-md p-2 bg-primary/5 border-primary/20">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <Badge variant="outline" className="text-[10px] uppercase bg-primary text-primary-foreground border-transparent">Primary</Badge>
+                                    <span className="text-xs font-mono text-muted-foreground">{item.primarySupplier}</span>
+                                  </div>
+                                  <div className="font-medium text-sm">{suppliers.find(s => s.id === item.primarySupplier)?.name || 'Unknown Supplier'}</div>
+                                </div>
+                              )}
+                              {item.secondarySupplier && (
+                                <div className="border rounded-md p-2 bg-muted/30">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <Badge variant="secondary" className="text-[10px] uppercase">Secondary</Badge>
+                                    <span className="text-xs font-mono text-muted-foreground">{item.secondarySupplier}</span>
+                                  </div>
+                                  <div className="font-medium text-sm">{suppliers.find(s => s.id === item.secondarySupplier)?.name || 'Unknown Supplier'}</div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </HoverCardContent>
+                      </HoverCard>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Unassigned</span>
                     )}
                   </TableCell>
                   <TableCell className="w-[180px]">

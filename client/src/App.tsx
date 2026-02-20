@@ -9,6 +9,7 @@ import Jobs from "@/pages/jobs";
 import Templates from "@/pages/templates";
 import Assets from "@/pages/assets";
 import Inventory from "@/pages/inventory";
+import Suppliers from "@/pages/suppliers";
 import Transactions from "@/pages/transactions";
 import PurchaseOrders from "@/pages/purchase-orders";
 import Calendar from "@/pages/calendar";
@@ -23,6 +24,7 @@ function Router() {
       <Route path="/templates" component={Templates} />
       <Route path="/assets" component={Assets} />
       <Route path="/inventory" component={Inventory} />
+      <Route path="/suppliers" component={Suppliers} />
       <Route path="/purchase-orders" component={PurchaseOrders} />
       <Route path="/transactions" component={Transactions} />
       <Route path="/calendar" component={Calendar} />

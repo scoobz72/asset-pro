@@ -15,7 +15,8 @@ import {
   ChevronDown,
   FileSignature,
   ArrowRightLeft,
-  ShoppingCart
+  ShoppingCart,
+  Truck
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +38,7 @@ const navigation = [
   { name: 'Templates', href: '/templates', icon: FileSignature },
   { name: 'Assets', href: '/assets', icon: Box },
   { name: 'Inventory', href: '/inventory', icon: Wrench },
+  { name: 'Suppliers', href: '/suppliers', icon: Truck },
   { name: 'Purchase Orders', href: '/purchase-orders', icon: ShoppingCart },
   { name: 'Transactions', href: '/transactions', icon: ArrowRightLeft },
   { name: 'Calendar', href: '/calendar', icon: CalendarIcon },

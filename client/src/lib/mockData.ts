@@ -24,11 +24,11 @@ export const jobs = [
 ];
 
 export const inventory = [
-  { id: "PART-001", name: "Filter Type A", category: "Consumables", stock: 45, minStock: 10, unit: "pcs", location: "Shelf A1", lastUsed: "2023-11-10", lastStockTaken: "2023-11-01", usedOnAssets: ["A-102", "A-201"] },
-  { id: "PART-002", name: "Hydraulic Fluid", category: "Fluids", stock: 120, minStock: 50, unit: "L", location: "Cabinet B", lastUsed: "2023-11-12", lastStockTaken: "2023-10-25", usedOnAssets: ["A-101", "A-205", "A-301"] },
-  { id: "PART-003", name: "Bearing 6204", category: "Spares", stock: 4, minStock: 10, unit: "pcs", location: "Shelf C3", lastUsed: "2023-11-05", lastStockTaken: "2023-11-05", usedOnAssets: ["A-101", "A-205"] },
-  { id: "PART-004", name: "V-Belt B52", category: "Spares", stock: 8, minStock: 5, unit: "pcs", location: "Shelf C4", lastUsed: "2023-10-28", lastStockTaken: "2023-11-01", usedOnAssets: ["A-102"] },
-  { id: "PART-005", name: "Safety Gloves", category: "PPE", stock: 200, minStock: 50, unit: "pairs", location: "Locker 1", lastUsed: "2023-11-14", lastStockTaken: "2023-11-10", usedOnAssets: ["A-205"] },
+  { id: "PART-001", name: "Filter Type A", category: "Consumables", stock: 45, minStock: 10, unit: "pcs", location: "Shelf A1", lastUsed: "2023-11-10", lastStockTaken: "2023-11-01", usedOnAssets: ["A-102", "A-201"], primarySupplier: "SUP-001", secondarySupplier: "SUP-005" },
+  { id: "PART-002", name: "Hydraulic Fluid", category: "Fluids", stock: 120, minStock: 50, unit: "L", location: "Cabinet B", lastUsed: "2023-11-12", lastStockTaken: "2023-10-25", usedOnAssets: ["A-101", "A-205", "A-301"], primarySupplier: "SUP-002", secondarySupplier: "SUP-001" },
+  { id: "PART-003", name: "Bearing 6204", category: "Spares", stock: 4, minStock: 10, unit: "pcs", location: "Shelf C3", lastUsed: "2023-11-05", lastStockTaken: "2023-11-05", usedOnAssets: ["A-101", "A-205"], primarySupplier: "SUP-003", secondarySupplier: "SUP-001" },
+  { id: "PART-004", name: "V-Belt B52", category: "Spares", stock: 8, minStock: 5, unit: "pcs", location: "Shelf C4", lastUsed: "2023-10-28", lastStockTaken: "2023-11-01", usedOnAssets: ["A-102"], primarySupplier: "SUP-001", secondarySupplier: "SUP-005" },
+  { id: "PART-005", name: "Safety Gloves", category: "PPE", stock: 200, minStock: 50, unit: "pairs", location: "Locker 1", lastUsed: "2023-11-14", lastStockTaken: "2023-11-10", usedOnAssets: ["A-205"], primarySupplier: "SUP-004", secondarySupplier: "SUP-005" },
 ];
 
 export const templates = [
@@ -90,4 +90,12 @@ export const purchaseOrders = [
   { id: "PO-2023-089", vendor: "Fluid Dynamics Inc", status: "Received", total: 450.00, requestedBy: "Mike Johnson (Lead)", date: "2023-11-10", items: 1 },
   { id: "PO-2023-088", vendor: "Safety First Gear", status: "Approved", total: 890.50, requestedBy: "Admin User", date: "2023-11-15", items: 4 },
   { id: "PO-2023-087", vendor: "Global Bearings", status: "Draft", total: 320.00, requestedBy: "Sarah Smith (Lead)", date: "2023-11-17", items: 2 },
+];
+
+export const suppliers = [
+  { id: "SUP-001", name: "Industrial Supply Co", categories: ["Consumables", "Spares", "Tools"], rating: 4.8, leadTime: "2-3 days", contact: "sales@industrialsupply.com" },
+  { id: "SUP-002", name: "Fluid Dynamics Inc", categories: ["Fluids", "Lubricants", "Pumps"], rating: 4.5, leadTime: "1-2 days", contact: "orders@fluiddynamics.com" },
+  { id: "SUP-003", name: "Global Bearings", categories: ["Spares", "Bearings", "Motors"], rating: 4.9, leadTime: "3-5 days", contact: "support@globalbearings.com" },
+  { id: "SUP-004", name: "Safety First Gear", categories: ["PPE", "Safety", "Uniforms"], rating: 4.2, leadTime: "1 day", contact: "sales@safetyfirst.com" },
+  { id: "SUP-005", name: "FastParts Logistics", categories: ["Consumables", "Electrical", "Spares"], rating: 3.9, leadTime: "1-2 days", contact: "urgent@fastparts.com" }
 ];
