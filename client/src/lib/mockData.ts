@@ -84,3 +84,10 @@ export const stockTransactions = [
   { id: "TXN-004", date: "2023-11-10T09:45:00", partId: "PART-003", partName: "Bearing 6204", type: "Transfer In", quantity: 10, user: "Mike Johnson", reference: "From Factory B" },
   { id: "TXN-005", date: "2023-11-08T16:20:00", partId: "PART-004", partName: "V-Belt B52", type: "Job Book Out", quantity: -1, user: "Sarah Smith", reference: "JOB-0988" },
 ];
+
+export const purchaseOrders = [
+  { id: "PO-2023-090", vendor: "Industrial Supply Co", status: "Pending Approval", total: 1250.00, requestedBy: "Emily Davis (Lead)", date: "2023-11-16", items: 3 },
+  { id: "PO-2023-089", vendor: "Fluid Dynamics Inc", status: "Received", total: 450.00, requestedBy: "Mike Johnson (Lead)", date: "2023-11-10", items: 1 },
+  { id: "PO-2023-088", vendor: "Safety First Gear", status: "Approved", total: 890.50, requestedBy: "Admin User", date: "2023-11-15", items: 4 },
+  { id: "PO-2023-087", vendor: "Global Bearings", status: "Draft", total: 320.00, requestedBy: "Sarah Smith (Lead)", date: "2023-11-17", items: 2 },
+];
