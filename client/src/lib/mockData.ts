@@ -30,3 +30,49 @@ export const inventory = [
   { id: "PART-004", name: "V-Belt B52", category: "Spares", stock: 8, minStock: 5, unit: "pcs", location: "Shelf C4" },
   { id: "PART-005", name: "Safety Gloves", category: "PPE", stock: 200, minStock: 50, unit: "pairs", location: "Locker 1" },
 ];
+
+export const templates = [
+  { 
+    id: "TPL-001", 
+    name: "Standard Breakdown Report", 
+    type: "Breakdown",
+    description: "Generic template for unexpected equipment failures.",
+    steps: [
+      { id: 1, text: "Isolate equipment and apply LOTO (Lockout/Tagout)", required: true },
+      { id: 2, text: "Identify root cause of failure", required: true },
+      { id: 3, text: "Perform necessary repairs/part replacements", required: true },
+      { id: 4, text: "Test equipment functionality post-repair", required: true },
+      { id: 5, text: "Remove LOTO and return to service", required: true },
+      { id: 6, text: "Clean work area", required: false }
+    ],
+    signOffs: ["Lead Engineer"]
+  },
+  { 
+    id: "TPL-002", 
+    name: "Hydraulic Press PM - Monthly", 
+    type: "Planned",
+    description: "Specific monthly maintenance steps for all hydraulic presses.",
+    steps: [
+      { id: 1, text: "Check fluid levels and top up if necessary", required: true },
+      { id: 2, text: "Inspect all hoses for leaks or wear", required: true },
+      { id: 3, text: "Verify pressure gauge readings match specifications", required: true },
+      { id: 4, text: "Lubricate guide rails and moving parts", required: true },
+      { id: 5, text: "Test emergency stop mechanism", required: true }
+    ],
+    signOffs: ["Technician", "Safety Officer"]
+  },
+  { 
+    id: "TPL-003", 
+    name: "HVAC Filter Replacement", 
+    type: "Planned",
+    description: "Quarterly filter replacement for HVAC systems.",
+    steps: [
+      { id: 1, text: "Turn off HVAC unit power", required: true },
+      { id: 2, text: "Remove old filters and bag for disposal", required: true },
+      { id: 3, text: "Vacuum filter housing unit", required: false },
+      { id: 4, text: "Install new filters (ensure correct airflow direction)", required: true },
+      { id: 5, text: "Restore power and verify airflow", required: true }
+    ],
+    signOffs: ["Technician"]
+  }
+];

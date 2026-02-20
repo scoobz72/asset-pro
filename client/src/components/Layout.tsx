@@ -12,7 +12,8 @@ import {
   Menu,
   Bell,
   Search,
-  ChevronDown
+  ChevronDown,
+  FileSignature
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +32,7 @@ import { useState } from "react";
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Jobs', href: '/jobs', icon: ClipboardList },
+  { name: 'Templates', href: '/templates', icon: FileSignature },
   { name: 'Assets', href: '/assets', icon: Box },
   { name: 'Inventory', href: '/inventory', icon: Wrench },
   { name: 'Calendar', href: '/calendar', icon: CalendarIcon },
