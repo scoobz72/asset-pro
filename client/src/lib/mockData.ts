@@ -99,3 +99,10 @@ export const suppliers = [
   { id: "SUP-004", name: "Safety First Gear", categories: ["PPE", "Safety", "Uniforms"], rating: 4.2, leadTime: "1 day", contact: "sales@safetyfirst.com" },
   { id: "SUP-005", name: "FastParts Logistics", categories: ["Consumables", "Electrical", "Spares"], rating: 3.9, leadTime: "1-2 days", contact: "urgent@fastparts.com" }
 ];
+
+export const assetAudits = [
+  { id: "AUD-001", assetId: "A-101", status: "Pending", scheduledDate: "2023-11-20", assignedTo: "John Doe", expectedLocation: "Building A" },
+  { id: "AUD-002", assetId: "A-201", status: "Completed", scheduledDate: "2023-11-15", assignedTo: "Sarah Smith", expectedLocation: "Roof", verifiedLocation: "Roof", completionDate: "2023-11-15T10:30:00" },
+  { id: "AUD-003", assetId: "A-205", status: "Discrepancy", scheduledDate: "2023-11-18", assignedTo: "Mike Johnson", expectedLocation: "Basement", verifiedLocation: "Building B", completionDate: "2023-11-18T14:45:00", notes: "Asset was moved without updating system." },
+  { id: "AUD-004", assetId: "A-301", status: "Scheduled", scheduledDate: "2023-12-05", assignedTo: "Emily Davis", expectedLocation: "Workshop" },
+];

@@ -8,6 +8,7 @@ import Dashboard from "@/pages/dashboard";
 import Jobs from "@/pages/jobs";
 import Templates from "@/pages/templates";
 import Assets from "@/pages/assets";
+import Audits from "@/pages/audits";
 import Inventory from "@/pages/inventory";
 import Suppliers from "@/pages/suppliers";
 import Transactions from "@/pages/transactions";
@@ -23,6 +24,7 @@ function Router() {
       <Route path="/jobs" component={Jobs} />
       <Route path="/templates" component={Templates} />
       <Route path="/assets" component={Assets} />
+      <Route path="/audits" component={Audits} />
       <Route path="/inventory" component={Inventory} />
       <Route path="/suppliers" component={Suppliers} />
       <Route path="/purchase-orders" component={PurchaseOrders} />
