@@ -7,6 +7,20 @@ export const users = [
   { id: 4, name: "Emily Davis", role: "Technician", status: "Offline", avatar: "https://i.pravatar.cc/150?u=4" },
 ];
 
+export const sites = [
+  { id: "SITE-001", name: "Main Production Facility" },
+  { id: "SITE-002", name: "Logistics Hub" }
+];
+
+export const locations = [
+  { id: "LOC-101", name: "Building A", siteId: "SITE-001" },
+  { id: "LOC-102", name: "Roof", siteId: "SITE-001" },
+  { id: "LOC-103", name: "Basement", siteId: "SITE-001" },
+  { id: "LOC-104", name: "Workshop", siteId: "SITE-001" },
+  { id: "LOC-201", name: "Zone 1", siteId: "SITE-002" },
+  { id: "LOC-202", name: "Building B", siteId: "SITE-002" },
+];
+
 export const assets = [
   { id: "A-101", name: "Hydraulic Press #4", location: "Building A", status: "Operational", health: 98, lastService: "2023-10-15", partsUsed: ["PART-002", "PART-003"] },
   { id: "A-102", name: "Conveyor Belt Main", location: "Building A", status: "Maintenance", health: 45, lastService: "2023-11-01", partsUsed: ["PART-004", "PART-001"] },

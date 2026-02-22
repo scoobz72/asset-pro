@@ -1,5 +1,5 @@
 import Layout from "@/components/Layout";
-import { assets, inventory } from "@/lib/mockData";
+import { assets as initialAssets, inventory, locations, sites } from "@/lib/mockData";
 import { 
   Card, 
   CardContent, 
@@ -20,7 +20,8 @@ import {
   Calendar,
   Image as ImageIcon,
   Edit2,
-  Wrench
+  Wrench,
+  Check
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -36,8 +37,30 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useState } from "react";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Assets() {
+  const [assets, setAssets] = useState(initialAssets);
+  const { toast } = useToast();
+
+  const handleLocationChange = (assetId: string, newLocation: string) => {
+    setAssets(assets.map(a => a.id === assetId ? { ...a, location: newLocation } : a));
+    toast({
+      title: "Location Updated",
+      description: "The asset has been successfully relocated.",
+    });
+  };
+
   return (
     <Layout>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -89,9 +112,49 @@ export default function Assets() {
                     <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
                        <MapPin className="size-4 opacity-70" />
                        <span className="font-medium text-foreground">{asset.location}</span>
-                       <Button variant="ghost" size="sm" className="h-6 px-2 ml-1 text-xs">
-                         Change
-                       </Button>
+                       <Dialog>
+                         <DialogTrigger asChild>
+                           <Button variant="ghost" size="sm" className="h-6 px-2 ml-1 text-xs">
+                             Change
+                           </Button>
+                         </DialogTrigger>
+                         <DialogContent className="sm:max-w-[425px]">
+                           <DialogHeader>
+                             <DialogTitle>Update Asset Location</DialogTitle>
+                             <DialogDescription>
+                               Move this asset to a new location.
+                             </DialogDescription>
+                           </DialogHeader>
+                           <div className="grid gap-4 py-4">
+                             <div className="space-y-2">
+                               <Select onValueChange={(val) => handleLocationChange(asset.id, val)} defaultValue={asset.location}>
+                                 <SelectTrigger>
+                                   <SelectValue placeholder="Select new location" />
+                                 </SelectTrigger>
+                                 <SelectContent>
+                                   {sites.map(site => {
+                                     const siteLocs = locations.filter(l => l.siteId === site.id);
+                                     if (siteLocs.length === 0) return null;
+                                     return (
+                                       <SelectGroup key={site.id}>
+                                         <SelectLabel className="font-semibold text-primary/70">{site.name}</SelectLabel>
+                                         {siteLocs.map(loc => (
+                                           <SelectItem key={loc.id} value={loc.name}>
+                                             <div className="flex items-center">
+                                               {loc.name}
+                                               {asset.location === loc.name && <Check className="ml-2 size-3 text-green-500" />}
+                                             </div>
+                                           </SelectItem>
+                                         ))}
+                                       </SelectGroup>
+                                     );
+                                   })}
+                                 </SelectContent>
+                               </Select>
+                             </div>
+                           </div>
+                         </DialogContent>
+                       </Dialog>
                     </div>
                   </div>
                   

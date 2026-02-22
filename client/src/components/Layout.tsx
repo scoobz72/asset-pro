@@ -17,7 +17,8 @@ import {
   ArrowRightLeft,
   ShoppingCart,
   Truck,
-  ScanLine
+  ScanLine,
+  MapPin
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +40,7 @@ const navigation = [
   { name: 'Templates', href: '/templates', icon: FileSignature },
   { name: 'Assets', href: '/assets', icon: Box },
   { name: 'Asset Audits', href: '/audits', icon: ScanLine },
+  { name: 'Locations', href: '/locations', icon: MapPin },
   { name: 'Inventory', href: '/inventory', icon: Wrench },
   { name: 'Suppliers', href: '/suppliers', icon: Truck },
   { name: 'Purchase Orders', href: '/purchase-orders', icon: ShoppingCart },
