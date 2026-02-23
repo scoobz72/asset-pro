@@ -39,16 +39,22 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { format, subDays } from "date-fns";
 
-const chartData = [
-  { name: 'Mon', completed: 4, opened: 6 },
-  { name: 'Tue', completed: 3, opened: 2 },
-  { name: 'Wed', completed: 7, opened: 5 },
-  { name: 'Thu', completed: 5, opened: 4 },
-  { name: 'Fri', completed: 8, opened: 3 },
-  { name: 'Sat', completed: 2, opened: 1 },
-  { name: 'Sun', completed: 1, opened: 0 },
+const baseData = [
+  { completed: 4, opened: 6 },
+  { completed: 3, opened: 2 },
+  { completed: 7, opened: 5 },
+  { completed: 5, opened: 4 },
+  { completed: 8, opened: 3 },
+  { completed: 2, opened: 1 },
+  { completed: 1, opened: 0 },
 ];
+
+const chartData = baseData.map((data, i) => ({
+  name: format(subDays(new Date(), 6 - i), 'MMM dd'),
+  ...data
+}));
 
 export default function Dashboard() {
   const [dateFilter, setDateFilter] = useState("7days");
