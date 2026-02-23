@@ -93,10 +93,12 @@ export const templates = [
 
 export const stockTransactions = [
   { id: "TXN-001", date: "2023-11-15T08:30:00", partId: "PART-001", partName: "Filter Type A", type: "Job Book Out", quantity: -2, user: "Sarah Smith", reference: "JOB-1002" },
-  { id: "TXN-002", date: "2023-11-14T14:15:00", partId: "PART-005", partName: "Safety Gloves", type: "Stock Adjustment", quantity: -5, user: "John Doe", reference: "Damaged stock" },
+  { id: "TXN-002", date: "2023-11-14T14:15:00", partId: "PART-005", partName: "Safety Gloves", type: "Stock Out - Damaged", quantity: -5, user: "John Doe", reference: "Cycle Check" },
   { id: "TXN-003", date: "2023-11-12T10:00:00", partId: "PART-002", partName: "Hydraulic Fluid", type: "Purchase Order", quantity: 50, user: "System", reference: "PO-2023-089" },
   { id: "TXN-004", date: "2023-11-10T09:45:00", partId: "PART-003", partName: "Bearing 6204", type: "Transfer In", quantity: 10, user: "Mike Johnson", reference: "From Factory B" },
   { id: "TXN-005", date: "2023-11-08T16:20:00", partId: "PART-004", partName: "V-Belt B52", type: "Job Book Out", quantity: -1, user: "Sarah Smith", reference: "JOB-0988" },
+  { id: "TXN-006", date: "2023-11-07T11:20:00", partId: "PART-004", partName: "V-Belt B52", type: "Stock In", quantity: 2, user: "Mike Johnson", reference: "Cycle Check (Found extra)" },
+  { id: "TXN-007", date: "2023-11-06T09:10:00", partId: "PART-001", partName: "Filter Type A", type: "Stock Out - Missing", quantity: -1, user: "John Doe", reference: "Cycle Check" },
 ];
 
 export const purchaseOrders = [

@@ -44,9 +44,12 @@ export default function Transactions() {
   const getTransactionIcon = (type: string) => {
     switch (type) {
       case "Job Book Out":
+      case "Stock Out - Missing":
+      case "Stock Out - Damaged":
         return <ArrowUpFromLine className="size-4 text-orange-500" />;
       case "Purchase Order":
       case "Transfer In":
+      case "Stock In":
         return <ArrowDownToLine className="size-4 text-green-500" />;
       case "Stock Adjustment":
         return <RefreshCw className="size-4 text-blue-500" />;
@@ -59,8 +62,14 @@ export default function Transactions() {
     switch (type) {
       case "Job Book Out":
         return <Badge variant="outline" className="text-orange-600 bg-orange-50 border-orange-200">Job Book Out</Badge>;
+      case "Stock Out - Missing":
+        return <Badge variant="outline" className="text-red-600 bg-red-50 border-red-200">Missing</Badge>;
+      case "Stock Out - Damaged":
+        return <Badge variant="outline" className="text-red-600 bg-red-50 border-red-200">Damaged</Badge>;
       case "Purchase Order":
         return <Badge variant="outline" className="text-green-600 bg-green-50 border-green-200">Purchase Order</Badge>;
+      case "Stock In":
+        return <Badge variant="outline" className="text-emerald-600 bg-emerald-50 border-emerald-200">Stock In</Badge>;
       case "Transfer In":
         return <Badge variant="outline" className="text-emerald-600 bg-emerald-50 border-emerald-200">Transfer In</Badge>;
       case "Stock Adjustment":

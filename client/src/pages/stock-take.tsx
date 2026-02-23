@@ -20,10 +20,19 @@ import {
   Search,
   ArrowRight,
   Save,
-  AlertTriangle
+  AlertTriangle,
+  History
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
+import { Link } from "wouter";
 
 export default function StockTake() {
   const { toast } = useToast();
@@ -31,10 +40,9 @@ export default function StockTake() {
   const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [countedItems, setCountedItems] = useState<Record<string, number>>({});
+  const [reasons, setReasons] = useState<Record<string, string>>({});
   
   // Get unique locations from inventory, or use the locations list
-  // Actually, inventory mockData uses 'location' strings like "Shelf A1", "Cabinet B".
-  // Let's extract unique locations from inventory items for the bins/rooms.
   const inventoryLocations = Array.from(new Set(inventory.map(item => item.location))).sort();
 
   const handleLocationToggle = (loc: string) => {
@@ -57,17 +65,33 @@ export default function StockTake() {
     
     // Initialize count state with current stock
     const initialCounts: Record<string, number> = {};
+    const initialReasons: Record<string, string> = {};
     filteredInventory.forEach(item => {
       initialCounts[item.id] = item.stock;
     });
     setCountedItems(initialCounts);
+    setReasons(initialReasons);
     setStep(2);
   };
 
-  const handleCountChange = (id: string, value: string) => {
+  const handleCountChange = (id: string, value: string, currentStock: number) => {
     const num = parseInt(value, 10);
     if (!isNaN(num) && num >= 0) {
       setCountedItems(prev => ({ ...prev, [id]: num }));
+      
+      // Auto-assign default reasons based on variance
+      const variance = num - currentStock;
+      if (variance > 0) {
+        setReasons(prev => ({ ...prev, [id]: "Stock In" }));
+      } else if (variance < 0) {
+        setReasons(prev => ({ ...prev, [id]: "Stock Out - Missing" }));
+      } else {
+        setReasons(prev => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      }
     } else if (value === "") {
       // Allow empty temporarily while typing, but default to 0 on blur
       setCountedItems(prev => {
@@ -75,19 +99,29 @@ export default function StockTake() {
         delete next[id]; // removes it so input becomes empty
         return next;
       });
+      setReasons(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
     }
+  };
+
+  const handleReasonChange = (id: string, reason: string) => {
+    setReasons(prev => ({ ...prev, [id]: reason }));
   };
 
   const submitStockTake = () => {
     toast({
-      title: "Stock Take Completed",
-      description: `Successfully updated stock counts for ${filteredInventory.length} items.`,
+      title: "Cycle Check Completed",
+      description: `Successfully updated stock counts. Date stamps and reasons have been logged.`,
     });
-    // In a real app, this would send an API request to update stock and create audit logs
+    // In a real app, this would create transaction logs with the selected reasons and date stamps
     setTimeout(() => {
       setStep(1);
       setSelectedLocations([]);
       setCountedItems({});
+      setReasons({});
     }, 1500);
   };
 
@@ -101,19 +135,28 @@ export default function StockTake() {
     <Layout>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Stock Take</h1>
-          <p className="text-muted-foreground mt-1">Audit and update inventory levels by location.</p>
+          <h1 className="text-3xl font-bold tracking-tight">Cycle Check</h1>
+          <p className="text-muted-foreground mt-1">Audit and update inventory levels with discrepancy reasons.</p>
         </div>
-        {step === 2 && (
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setStep(1)}>
-              Back to Selection
-            </Button>
-            <Button onClick={submitStockTake} className="gap-2">
-              <Save className="size-4" /> Complete Stock Take
-            </Button>
-          </div>
-        )}
+        <div className="flex gap-2">
+          {step === 1 && (
+            <Link href="/transactions">
+              <Button variant="outline" className="gap-2">
+                <History className="size-4" /> View Activity Logs
+              </Button>
+            </Link>
+          )}
+          {step === 2 && (
+            <>
+              <Button variant="outline" onClick={() => setStep(1)}>
+                Back to Selection
+              </Button>
+              <Button onClick={submitStockTake} className="gap-2">
+                <Save className="size-4" /> Complete Cycle Check
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       {step === 1 ? (
@@ -125,7 +168,7 @@ export default function StockTake() {
                 Select Locations
               </CardTitle>
               <CardDescription>
-                Choose the store rooms or bins you want to audit.
+                Choose the store rooms or bins you want to cycle check.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -180,9 +223,9 @@ export default function StockTake() {
             <div className="size-16 bg-primary/10 text-primary rounded-full flex items-center justify-center mb-4">
               <ClipboardList className="size-8" />
             </div>
-            <h3 className="text-lg font-semibold mb-2">Targeted Audits</h3>
+            <h3 className="text-lg font-semibold mb-2">Cycle Checks</h3>
             <p className="text-muted-foreground text-sm max-w-xs">
-              Select specific bins or store rooms to perform focused stock counts. This allows multiple team members to audit different areas simultaneously.
+              Perform targeted audits on specific bins or store rooms. You'll be asked to provide reasons for any stock variances, which will be logged with date stamps.
             </p>
           </div>
         </div>
@@ -222,12 +265,13 @@ export default function StockTake() {
                   <TableHead className="text-right">System Stock</TableHead>
                   <TableHead className="w-[150px] text-right px-4">Actual Count</TableHead>
                   <TableHead className="w-[100px] text-center">Variance</TableHead>
+                  <TableHead className="w-[200px]">Reason for Variance</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredInventory.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                    <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
                       No items found for the selected locations.
                     </TableCell>
                   </TableRow>
@@ -258,10 +302,10 @@ export default function StockTake() {
                                 hasVariance && "border-orange-300 focus-visible:ring-orange-500"
                               )}
                               value={count}
-                              onChange={(e) => handleCountChange(item.id, e.target.value)}
+                              onChange={(e) => handleCountChange(item.id, e.target.value, item.stock)}
                               onBlur={(e) => {
                                 if (e.target.value === "") {
-                                  handleCountChange(item.id, "0");
+                                  handleCountChange(item.id, "0", item.stock);
                                 }
                               }}
                             />
@@ -278,6 +322,34 @@ export default function StockTake() {
                             </div>
                           ) : (
                             <CheckCircle2 className="size-4 text-green-500 mx-auto opacity-50" />
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {hasVariance ? (
+                            <Select 
+                              value={reasons[item.id] || ""} 
+                              onValueChange={(val) => handleReasonChange(item.id, val)}
+                            >
+                              <SelectTrigger className="h-9">
+                                <SelectValue placeholder="Select Reason" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {variance > 0 ? (
+                                  <>
+                                    <SelectItem value="Stock In">Stock In (Found)</SelectItem>
+                                    <SelectItem value="Data Entry Error">Data Entry Error Correction</SelectItem>
+                                  </>
+                                ) : (
+                                  <>
+                                    <SelectItem value="Stock Out - Missing">Stock Out - Missing</SelectItem>
+                                    <SelectItem value="Stock Out - Damaged">Stock Out - Damaged</SelectItem>
+                                    <SelectItem value="Expired/Obsolete">Expired / Obsolete</SelectItem>
+                                  </>
+                                )}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <span className="text-xs text-muted-foreground italic pl-3">No variance</span>
                           )}
                         </TableCell>
                       </TableRow>

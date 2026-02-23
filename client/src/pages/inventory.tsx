@@ -67,7 +67,7 @@ export default function Inventory() {
           <Link href="/stock-take">
             <Button variant="outline" className="bg-primary/5 border-primary/20 text-primary hover:bg-primary/10">
               <ClipboardList className="mr-2 size-4" />
-              Stock Take
+              Cycle Check
             </Button>
           </Link>
           <Button variant="outline">
