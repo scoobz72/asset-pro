@@ -201,7 +201,6 @@ export default function Dashboard() {
             </DialogContent>
           </Dialog>
           <Button variant="outline">Download PDF</Button>
-          <Button>Create Job</Button>
         </div>
       </div>
 

@@ -38,11 +38,11 @@ export const jobs = [
 ];
 
 export const inventory = [
-  { id: "PART-001", name: "Filter Type A", category: "Consumables", stock: 45, minStock: 10, unit: "pcs", location: "Shelf A1", lastUsed: "2023-11-10", lastStockTaken: "2023-11-01", usedOnAssets: ["A-102", "A-201"], primarySupplier: "SUP-001", secondarySupplier: "SUP-005" },
-  { id: "PART-002", name: "Hydraulic Fluid", category: "Fluids", stock: 120, minStock: 50, unit: "L", location: "Cabinet B", lastUsed: "2023-11-12", lastStockTaken: "2023-10-25", usedOnAssets: ["A-101", "A-205", "A-301"], primarySupplier: "SUP-002", secondarySupplier: "SUP-001" },
-  { id: "PART-003", name: "Bearing 6204", category: "Spares", stock: 4, minStock: 10, unit: "pcs", location: "Shelf C3", lastUsed: "2023-11-05", lastStockTaken: "2023-11-05", usedOnAssets: ["A-101", "A-205"], primarySupplier: "SUP-003", secondarySupplier: "SUP-001" },
-  { id: "PART-004", name: "V-Belt B52", category: "Spares", stock: 8, minStock: 5, unit: "pcs", location: "Shelf C4", lastUsed: "2023-10-28", lastStockTaken: "2023-11-01", usedOnAssets: ["A-102"], primarySupplier: "SUP-001", secondarySupplier: "SUP-005" },
-  { id: "PART-005", name: "Safety Gloves", category: "PPE", stock: 200, minStock: 50, unit: "pairs", location: "Locker 1", lastUsed: "2023-11-14", lastStockTaken: "2023-11-10", usedOnAssets: ["A-205"], primarySupplier: "SUP-004", secondarySupplier: "SUP-005" },
+  { id: "PART-001", name: "Filter Type A", category: "Consumables", stock: 45, minStock: 10, unit: "pcs", location: "Shelf A1", lastUsed: "2023-11-10", lastStockTaken: "2023-11-01", lastReplenished: "2023-10-15", leadTime: 2, usedOnAssets: ["A-102", "A-201"], primarySupplier: "SUP-001", secondarySupplier: "SUP-005" },
+  { id: "PART-002", name: "Hydraulic Fluid", category: "Fluids", stock: 120, minStock: 50, unit: "L", location: "Cabinet B", lastUsed: "2023-11-12", lastStockTaken: "2023-10-25", lastReplenished: "2023-09-01", leadTime: 5, usedOnAssets: ["A-101", "A-205", "A-301"], primarySupplier: "SUP-002", secondarySupplier: "SUP-001" },
+  { id: "PART-003", name: "Bearing 6204", category: "Spares", stock: 4, minStock: 10, unit: "pcs", location: "Shelf C3", lastUsed: "2023-11-05", lastStockTaken: "2023-11-05", lastReplenished: "2023-05-12", leadTime: 14, usedOnAssets: ["A-101", "A-205"], primarySupplier: "SUP-003", secondarySupplier: "SUP-001" },
+  { id: "PART-004", name: "V-Belt B52", category: "Spares", stock: 8, minStock: 5, unit: "pcs", location: "Shelf C4", lastUsed: "2023-10-28", lastStockTaken: "2023-11-01", lastReplenished: "2023-08-20", leadTime: 4, usedOnAssets: ["A-102"], primarySupplier: "SUP-001", secondarySupplier: "SUP-005" },
+  { id: "PART-005", name: "Safety Gloves", category: "PPE", stock: 200, minStock: 50, unit: "pairs", location: "Locker 1", lastUsed: "2023-11-14", lastStockTaken: "2023-11-10", lastReplenished: "2023-11-05", leadTime: 1, usedOnAssets: ["A-205"], primarySupplier: "SUP-004", secondarySupplier: "SUP-005" },
 ];
 
 export const templates = [

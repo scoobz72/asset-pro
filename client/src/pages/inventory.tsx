@@ -1,5 +1,5 @@
 import Layout from "@/components/Layout";
-import { inventory, assets, suppliers } from "@/lib/mockData";
+import { inventory, assets, suppliers, stockTransactions } from "@/lib/mockData";
 import { 
   Table, 
   TableBody, 
@@ -19,7 +19,9 @@ import {
   ShoppingCart,
   Image as ImageIcon,
   MoreHorizontal,
-  Building2
+  Building2,
+  Clock,
+  History
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -36,6 +38,14 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 export default function Inventory() {
   const [filterLowStock, setFilterLowStock] = useState(false);
@@ -121,11 +131,10 @@ export default function Inventory() {
               <TableHead>Category</TableHead>
               <TableHead>Location</TableHead>
               <TableHead>Stock Level</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead>Criticality</TableHead>
               <TableHead>Suppliers</TableHead>
               <TableHead>Used On</TableHead>
-              <TableHead>Last Used</TableHead>
-              <TableHead>Last Stock Taken</TableHead>
+              <TableHead>Audit Log</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -133,6 +142,7 @@ export default function Inventory() {
             {displayedInventory.map((item) => {
               const stockPercentage = Math.min((item.stock / (item.minStock * 3)) * 100, 100);
               const isLow = item.stock < item.minStock;
+              const isCriticalLeadTime = item.leadTime > 3;
 
               return (
                 <TableRow key={item.id}>
@@ -168,6 +178,19 @@ export default function Inventory() {
                     ) : (
                       <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">In Stock</Badge>
                     )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      {isCriticalLeadTime ? (
+                        <Badge variant="destructive" className="bg-red-500 hover:bg-red-600">
+                          High (>{item.leadTime}d)
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="bg-muted text-muted-foreground">
+                          Low ({item.leadTime}d)
+                        </Badge>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     {(item.primarySupplier || item.secondarySupplier) ? (
@@ -237,8 +260,67 @@ export default function Inventory() {
                       <span className="text-xs text-muted-foreground">None</span>
                     )}
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{item.lastUsed}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{item.lastStockTaken}</TableCell>
+                  <TableCell>
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-foreground">
+                          <History className="mr-1 size-3" /> View Log
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-[600px]">
+                        <DialogHeader>
+                          <DialogTitle>Audit Log: {item.name}</DialogTitle>
+                          <DialogDescription>
+                            Recent history for {item.id}. Lead Time: {item.leadTime} days.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                          <div className="grid grid-cols-3 gap-4 pb-4 border-b">
+                            <div>
+                              <p className="text-xs text-muted-foreground">Last Used</p>
+                              <p className="text-sm font-medium">{item.lastUsed}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground">Last Stock Taken</p>
+                              <p className="text-sm font-medium">{item.lastStockTaken}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground">Last Replenished</p>
+                              <p className="text-sm font-medium">{item.lastReplenished}</p>
+                            </div>
+                          </div>
+                          <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
+                            <h4 className="text-sm font-semibold">Transaction History</h4>
+                            {stockTransactions.filter(t => t.partId === item.id).length > 0 ? (
+                              stockTransactions.filter(t => t.partId === item.id).map(tx => (
+                                <div key={tx.id} className="flex justify-between items-start pb-4 border-b last:border-0 last:pb-0">
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm font-medium">{tx.type}</span>
+                                      <Badge variant="outline" className="text-[10px]">{tx.reference}</Badge>
+                                    </div>
+                                    <div className="text-xs text-muted-foreground mt-1">
+                                      By {tx.user} on {new Date(tx.date).toLocaleDateString()}
+                                    </div>
+                                  </div>
+                                  <div className={cn(
+                                    "text-sm font-bold",
+                                    tx.quantity > 0 ? "text-green-600" : "text-destructive"
+                                  )}>
+                                    {tx.quantity > 0 ? "+" : ""}{tx.quantity} {item.unit}
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="text-sm text-muted-foreground italic py-2">
+                                No recent transactions found for this item.
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
