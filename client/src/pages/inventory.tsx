@@ -33,6 +33,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useState } from "react";
+import { Link } from "wouter";
 import {
   HoverCard,
   HoverCardContent,
@@ -46,6 +47,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { ClipboardList } from "lucide-react";
 
 export default function Inventory() {
   const [filterLowStock, setFilterLowStock] = useState(false);
@@ -62,6 +64,12 @@ export default function Inventory() {
           <p className="text-muted-foreground mt-1">Track parts, stock levels, and requisitions.</p>
         </div>
         <div className="flex gap-2">
+          <Link href="/stock-take">
+            <Button variant="outline" className="bg-primary/5 border-primary/20 text-primary hover:bg-primary/10">
+              <ClipboardList className="mr-2 size-4" />
+              Stock Take
+            </Button>
+          </Link>
           <Button variant="outline">
             <ShoppingCart className="mr-2 size-4" />
             Purchase Order

@@ -20,6 +20,7 @@ import Reports from "@/pages/reports";
 import Locations from "@/pages/locations";
 import Auth from "@/pages/auth";
 import Settings from "@/pages/settings";
+import StockTake from "@/pages/stock-take";
 
 function Router({ defaultLandingPage, setDefaultLandingPage }: any) {
   return (
@@ -30,6 +31,7 @@ function Router({ defaultLandingPage, setDefaultLandingPage }: any) {
       <Route path="/assets" component={Assets} />
       <Route path="/audits" component={Audits} />
       <Route path="/inventory" component={Inventory} />
+      <Route path="/stock-take" component={StockTake} />
       <Route path="/suppliers" component={Suppliers} />
       <Route path="/purchase-orders" component={PurchaseOrders} />
       <Route path="/transactions" component={Transactions} />
