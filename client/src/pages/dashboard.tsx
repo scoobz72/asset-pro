@@ -25,7 +25,10 @@ import {
   Wrench,
   AlertOctagon,
   Mail,
-  Send
+  Send,
+  MessageSquare,
+  Sparkles,
+  Bot
 } from "lucide-react";
 import { jobs, assets, inventory } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
@@ -51,9 +54,32 @@ export default function Dashboard() {
   const [dateFilter, setDateFilter] = useState("7days");
   const [isEmailing, setIsEmailing] = useState(false);
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
+  const [aiQuery, setAiQuery] = useState("");
+  const [aiResponse, setAiResponse] = useState<string | null>(null);
+  const [isAsking, setIsAsking] = useState(false);
   const { toast } = useToast();
 
-  const handleScheduleEmail = (e: React.FormEvent) => {
+  const handleAskAI = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!aiQuery.trim()) return;
+    
+    setIsAsking(true);
+    setAiResponse(null);
+    
+    // Simulate AI thinking and response
+    setTimeout(() => {
+      setIsAsking(false);
+      
+      const query = aiQuery.toLowerCase();
+      if (query.includes("low stock") || query.includes("parts")) {
+        setAiResponse(`I found ${inventory.filter(i => i.stock < i.minStock).length} parts currently below their minimum stock levels. The most critical is the 'Hydraulic Fluid' which has a 5-day lead time. Would you like me to draft a purchase order for these?`);
+      } else if (query.includes("asset") || query.includes("breakdown") || query.includes("broken")) {
+        setAiResponse(`In the last week, the 'Generator Backup' (A-205) has had the most downtime. It is currently marked as 'Down' and has 2 open jobs related to it. I recommend reviewing its recent maintenance history.`);
+      } else {
+        setAiResponse(`Based on our current data, overall completion rate is steady at 94%. We have 4 open jobs, and 1 critical asset currently down. Is there a specific area you'd like me to analyze further?`);
+      }
+    }, 1500);
+  };
     e.preventDefault();
     setIsEmailing(true);
     setTimeout(() => {
@@ -266,6 +292,47 @@ export default function Dashboard() {
         </Card>
         
         <div className="col-span-3 space-y-4">
+          <Card className="shadow-sm border-primary/20 bg-primary/5">
+            <CardHeader className="py-4 pb-2">
+              <CardTitle className="text-base flex items-center text-primary">
+                <Bot className="size-5 mr-2" />
+                Ask SmartAIss
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Ask questions about your assets, inventory, or operations.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pb-4 space-y-3">
+              <div className="flex flex-wrap gap-2 text-xs mb-2">
+                <Badge variant="secondary" className="cursor-pointer hover:bg-primary/20" onClick={() => setAiQuery("Show me parts with low stock")}>Low stock parts?</Badge>
+                <Badge variant="secondary" className="cursor-pointer hover:bg-primary/20" onClick={() => setAiQuery("Which assets broke down most this week?")}>Frequent breakdowns?</Badge>
+              </div>
+              
+              <form onSubmit={handleAskAI} className="flex gap-2">
+                <Input 
+                  placeholder="Ask a question..." 
+                  className="h-9 bg-background" 
+                  value={aiQuery}
+                  onChange={(e) => setAiQuery(e.target.value)}
+                />
+                <Button type="submit" size="sm" className="h-9 px-3" disabled={isAsking || !aiQuery.trim()}>
+                  {isAsking ? <Activity className="size-4 animate-pulse" /> : <Sparkles className="size-4" />}
+                </Button>
+              </form>
+
+              {aiResponse && (
+                <div className="mt-3 p-3 bg-background rounded-md text-sm border shadow-sm animate-in fade-in slide-in-from-bottom-2 flex items-start gap-3">
+                  <div className="p-1.5 bg-primary/10 text-primary rounded-full shrink-0 mt-0.5">
+                    <Sparkles className="size-3" />
+                  </div>
+                  <p className="text-muted-foreground leading-relaxed">
+                    {aiResponse}
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <Card className="shadow-sm">
             <CardHeader className="py-4">
               <CardTitle className="text-base flex items-center">
