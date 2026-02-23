@@ -80,6 +80,8 @@ export default function Dashboard() {
       }
     }, 1500);
   };
+
+  const handleScheduleEmail = (e: React.FormEvent) => {
     e.preventDefault();
     setIsEmailing(true);
     setTimeout(() => {
@@ -385,7 +387,7 @@ export default function Dashboard() {
                         </div>
                         <div>
                           <p className="text-sm font-medium leading-none">{item.name}</p>
-                          <p className="text-xs text-muted-foreground mt-1">{item.sku}</p>
+                          <p className="text-xs text-muted-foreground mt-1">{item.id}</p>
                         </div>
                       </div>
                       <div className="text-right">

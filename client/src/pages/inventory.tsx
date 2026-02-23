@@ -183,7 +183,7 @@ export default function Inventory() {
                     <div className="flex items-center gap-2">
                       {isCriticalLeadTime ? (
                         <Badge variant="destructive" className="bg-red-500 hover:bg-red-600">
-                          High (>{item.leadTime}d)
+                          High (&gt;{item.leadTime}d)
                         </Badge>
                       ) : (
                         <Badge variant="secondary" className="bg-muted text-muted-foreground">
