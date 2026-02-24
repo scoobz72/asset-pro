@@ -18,6 +18,7 @@ import Calendar from "@/pages/calendar";
 import Team from "@/pages/team";
 import Reports from "@/pages/reports";
 import Locations from "@/pages/locations";
+import RequestPortal from "@/pages/request-portal";
 import Auth from "@/pages/auth";
 import Settings from "@/pages/settings";
 import StockTake from "@/pages/stock-take";
@@ -40,6 +41,7 @@ function Router({ defaultLandingPage, setDefaultLandingPage }: any) {
       <Route path="/team" component={Team} />
       <Route path="/reports" component={Reports} />
       <Route path="/locations" component={Locations} />
+      <Route path="/request-portal" component={RequestPortal} />
       <Route path="/settings">
         <Settings 
           defaultLandingPage={defaultLandingPage} 

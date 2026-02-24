@@ -100,6 +100,19 @@ export default function Jobs() {
                   </Select>
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="jobType" className="text-right">Type</Label>
+                  <Select>
+                    <SelectTrigger className="col-span-3">
+                      <SelectValue placeholder="Select job type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Breakdown">Breakdown</SelectItem>
+                      <SelectItem value="Planned">Planned</SelectItem>
+                      <SelectItem value="Request">Request</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="priority" className="text-right">Priority</Label>
                   <Select>
                     <SelectTrigger className="col-span-3">
