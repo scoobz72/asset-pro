@@ -27,6 +27,8 @@ export const assets = [
   { id: "A-201", name: "Cooling Tower B", location: "Roof", status: "Operational", health: 92, lastService: "2023-09-20", partsUsed: ["PART-001"] },
   { id: "A-205", name: "Generator Backup", location: "Basement", status: "Down", health: 0, lastService: "2023-08-10", partsUsed: ["PART-005", "PART-002", "PART-003"] },
   { id: "A-301", name: "CNC Machine X1", location: "Workshop", status: "Operational", health: 88, lastService: "2023-10-25", partsUsed: ["PART-002"] },
+  { id: "A-401", name: "Forklift T2", location: "Zone 1", status: "Loaned Out", health: 100, lastService: "2023-11-05", partsUsed: [] },
+  { id: "A-402", name: "Spare Pump Unit", location: "Building B", status: "In Storage", health: 100, lastService: "2023-01-15", partsUsed: [] },
 ];
 
 export const jobs = [

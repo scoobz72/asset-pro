@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Search, 
   Plus, 
@@ -21,7 +22,11 @@ import {
   Image as ImageIcon,
   Edit2,
   Wrench,
-  Check
+  Check,
+  FolderTree,
+  List,
+  Building2,
+  Box
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -76,15 +81,22 @@ export default function Assets() {
         </div>
       </div>
 
-      <div className="flex items-center py-4 gap-2">
-        <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-          <Input placeholder="Search assets..." className="pl-9" />
+      <Tabs defaultValue="list" className="mt-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-4">
+          <TabsList>
+            <TabsTrigger value="list" className="gap-2"><List className="size-4" /> List View</TabsTrigger>
+            <TabsTrigger value="topology" className="gap-2"><FolderTree className="size-4" /> Topology Map</TabsTrigger>
+          </TabsList>
+          
+          <div className="relative w-full sm:max-w-sm flex-1">
+            <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+            <Input placeholder="Search assets..." className="pl-9" />
+          </div>
         </div>
-      </div>
 
-      <div className="flex flex-col gap-4">
-        {assets.map((asset) => (
+        <TabsContent value="list" className="space-y-4 m-0">
+          <div className="flex flex-col gap-4">
+            {assets.map((asset) => (
           <Card key={asset.id} className="overflow-hidden transition-all hover:shadow-md">
             <div className="flex flex-col sm:flex-row">
               {/* Asset Image / Placeholder */}
@@ -269,7 +281,107 @@ export default function Assets() {
             </div>
           </Card>
         ))}
-      </div>
+        </div>
+        </TabsContent>
+
+        <TabsContent value="topology" className="m-0">
+          <Card className="shadow-sm border-primary/20">
+            <CardHeader className="pb-3 border-b bg-muted/10">
+              <CardTitle>Asset Topology Hierarchy</CardTitle>
+              <CardDescription>
+                Company overview organized by Site, Location, and Status.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-8">
+              <div className="space-y-6">
+                <div className="flex items-center gap-3 text-xl font-bold text-primary border-b pb-4">
+                  <div className="p-2 bg-primary/10 rounded-md">
+                    <Building2 className="size-6" />
+                  </div>
+                  ProMaintain Systems (Demo Workspace)
+                </div>
+                
+                <div className="pl-8 space-y-10 border-l-2 ml-3 border-primary/20 py-2">
+                  {sites.map(site => {
+                    const siteLocs = locations.filter(l => l.siteId === site.id);
+                    return (
+                      <div key={site.id} className="relative">
+                        <div className="absolute -left-[35px] top-3 w-8 h-0.5 bg-primary/20"></div>
+                        <div className="flex items-center gap-2 font-bold text-lg mb-6 text-foreground/90">
+                          <MapPin className="size-5 text-blue-500" />
+                          {site.name}
+                        </div>
+                        
+                        <div className="pl-8 space-y-8 border-l ml-2.5 border-border">
+                          {siteLocs.map(loc => {
+                            const locAssets = assets.filter(a => a.location === loc.name);
+                            if (locAssets.length === 0) return null;
+                            
+                            const activeAssets = locAssets.filter(a => ["Operational", "Maintenance", "Down"].includes(a.status));
+                            const inactiveAssets = locAssets.filter(a => ["Loaned Out", "In Storage"].includes(a.status));
+                            
+                            return (
+                              <div key={loc.id} className="relative">
+                                <div className="absolute -left-[33px] top-3 w-8 h-px bg-border"></div>
+                                <div className="flex items-center gap-2 font-semibold mb-4 text-foreground/80">
+                                  <Box className="size-4 text-muted-foreground" />
+                                  {loc.name}
+                                </div>
+                                
+                                <div className="pl-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                  {activeAssets.map(asset => (
+                                    <div key={asset.id} className="p-4 border rounded-lg bg-card shadow-sm flex flex-col gap-3 relative group hover:border-primary/50 transition-all hover:shadow-md cursor-pointer">
+                                      <div className="absolute -left-[25px] top-1/2 w-6 h-px bg-border group-hover:bg-primary/50 transition-colors"></div>
+                                      <div className="flex items-start justify-between gap-2">
+                                        <span className="font-semibold text-sm truncate">{asset.name}</span>
+                                        <Badge variant={asset.status === "Operational" ? "default" : "destructive"} className={cn("text-[10px] h-5 px-1.5 shrink-0 whitespace-nowrap",
+                                          asset.status === "Operational" ? "bg-green-500 hover:bg-green-600" : 
+                                          asset.status === "Maintenance" ? "bg-yellow-500 hover:bg-yellow-600" :
+                                          "bg-red-500 hover:bg-red-600"
+                                        )}>
+                                          {asset.status}
+                                        </Badge>
+                                      </div>
+                                      <div className="flex items-center justify-between mt-auto pt-1">
+                                        <div className="text-xs text-muted-foreground font-mono">{asset.id}</div>
+                                        <div className="flex items-center gap-1 text-[10px] text-muted-foreground font-medium">
+                                          <Activity className={cn("size-3", 
+                                            asset.health > 90 ? "text-green-500" : asset.health > 70 ? "text-yellow-500" : "text-red-500"
+                                          )} />
+                                          {asset.health}%
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                  
+                                  {inactiveAssets.map(asset => (
+                                    <div key={asset.id} className="p-4 border border-dashed rounded-lg bg-muted/20 flex flex-col gap-3 relative group opacity-80 hover:opacity-100 transition-opacity">
+                                      <div className="absolute -left-[25px] top-1/2 w-6 h-px bg-border border-dashed"></div>
+                                      <div className="flex items-start justify-between gap-2">
+                                        <span className="font-medium text-sm text-muted-foreground truncate">{asset.name}</span>
+                                        <Badge variant="outline" className="text-[10px] h-5 px-1.5 text-muted-foreground bg-muted/50 shrink-0 whitespace-nowrap">
+                                          {asset.status}
+                                        </Badge>
+                                      </div>
+                                      <div className="flex items-center justify-between mt-auto pt-1">
+                                        <div className="text-xs text-muted-foreground/70 font-mono">{asset.id}</div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </Layout>
   );
 }
