@@ -30,33 +30,19 @@ import {
   Sparkles,
   Bot
 } from "lucide-react";
-import { jobs, assets, inventory } from "@/lib/mockData";
+import { useAssets, useJobs, useInventory } from "@/hooks/use-data";
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { format, subDays } from "date-fns";
-
-const baseData = [
-  { completed: 4, opened: 6 },
-  { completed: 3, opened: 2 },
-  { completed: 7, opened: 5 },
-  { completed: 5, opened: 4 },
-  { completed: 8, opened: 3 },
-  { completed: 2, opened: 1 },
-  { completed: 1, opened: 0 },
-];
+import { Skeleton } from "@/components/ui/skeleton";
 
 import { Link } from "wouter";
-
-const chartData = baseData.map((data, i) => ({
-  name: format(subDays(new Date(), 6 - i), 'MMM dd'),
-  ...data
-}));
 
 export default function Dashboard() {
   const [dateFilter, setDateFilter] = useState("7days");
@@ -67,6 +53,54 @@ export default function Dashboard() {
   const [isAsking, setIsAsking] = useState(false);
   const { toast } = useToast();
 
+  const { data: assets = [], isLoading: assetsLoading } = useAssets();
+  const { data: jobs = [], isLoading: jobsLoading } = useJobs();
+  const { data: inventoryItems = [], isLoading: inventoryLoading } = useInventory();
+
+  const isLoading = assetsLoading || jobsLoading || inventoryLoading;
+
+  const openJobsCount = useMemo(() => {
+    return (jobs as any[]).filter((j: any) => j.status !== "Completed").length;
+  }, [jobs]);
+
+  const assetsDownCount = useMemo(() => {
+    return (assets as any[]).filter((a: any) => a.status === "Down").length;
+  }, [assets]);
+
+  const lowStockItems = useMemo(() => {
+    return (inventoryItems as any[]).filter((i: any) => i.stock < i.minStock);
+  }, [inventoryItems]);
+
+  const completedJobsCount = useMemo(() => {
+    return (jobs as any[]).filter((j: any) => j.status === "Completed").length;
+  }, [jobs]);
+
+  const completionRate = useMemo(() => {
+    const total = (jobs as any[]).length;
+    if (total === 0) return "0%";
+    return `${Math.round((completedJobsCount / total) * 100)}%`;
+  }, [jobs, completedJobsCount]);
+
+  const criticalAssets = useMemo(() => {
+    return (assets as any[]).filter((a: any) => a.status === "Down" || a.status === "Maintenance");
+  }, [assets]);
+
+  const chartData = useMemo(() => {
+    const baseData = [
+      { completed: 4, opened: 6 },
+      { completed: 3, opened: 2 },
+      { completed: 7, opened: 5 },
+      { completed: 5, opened: 4 },
+      { completed: 8, opened: 3 },
+      { completed: 2, opened: 1 },
+      { completed: 1, opened: 0 },
+    ];
+    return baseData.map((data, i) => ({
+      name: format(subDays(new Date(), 6 - i), 'MMM dd'),
+      ...data
+    }));
+  }, []);
+
   const handleAskAI = (e: React.FormEvent) => {
     e.preventDefault();
     if (!aiQuery.trim()) return;
@@ -74,17 +108,18 @@ export default function Dashboard() {
     setIsAsking(true);
     setAiResponse(null);
     
-    // Simulate AI thinking and response
     setTimeout(() => {
       setIsAsking(false);
       
       const query = aiQuery.toLowerCase();
       if (query.includes("low stock") || query.includes("parts")) {
-        setAiResponse(`I found ${inventory.filter(i => i.stock < i.minStock).length} parts currently below their minimum stock levels. The most critical is the 'Hydraulic Fluid' which has a 5-day lead time. Would you like me to draft a purchase order for these?`);
+        setAiResponse(`I found ${lowStockItems.length} parts currently below their minimum stock levels. Would you like me to draft a purchase order for these?`);
       } else if (query.includes("asset") || query.includes("breakdown") || query.includes("broken")) {
-        setAiResponse(`In the last week, the 'Generator Backup' (A-205) has had the most downtime. It is currently marked as 'Down' and has 2 open jobs related to it. I recommend reviewing its recent maintenance history.`);
+        const downAssets = (assets as any[]).filter((a: any) => a.status === "Down");
+        const downNames = downAssets.map((a: any) => a.name).join(", ") || "none";
+        setAiResponse(`Currently ${downAssets.length} asset(s) are marked as 'Down': ${downNames}. I recommend reviewing their recent maintenance history.`);
       } else {
-        setAiResponse(`Based on our current data, overall completion rate is steady at 94%. We have 4 open jobs, and 1 critical asset currently down. Is there a specific area you'd like me to analyze further?`);
+        setAiResponse(`Based on our current data, overall completion rate is ${completionRate}. We have ${openJobsCount} open jobs, and ${assetsDownCount} critical asset(s) currently down. Is there a specific area you'd like me to analyze further?`);
       }
     }, 1500);
   };
@@ -105,7 +140,7 @@ export default function Dashboard() {
   const stats = [
     { 
       title: "Open Jobs", 
-      value: jobs.filter(j => j.status !== "Completed").length, 
+      value: openJobsCount, 
       change: "+2.5%", 
       trend: "up",
       icon: Clock,
@@ -123,7 +158,7 @@ export default function Dashboard() {
     },
     { 
       title: "Critical Assets Down", 
-      value: assets.filter(a => a.status === "Down").length, 
+      value: assetsDownCount, 
       change: "-1", 
       trend: "down",
       icon: AlertTriangle,
@@ -132,7 +167,7 @@ export default function Dashboard() {
     },
     { 
       title: "Low Stock Items", 
-      value: inventory.filter(i => i.stock < i.minStock).length, 
+      value: lowStockItems.length, 
       change: "+2", 
       trend: "up",
       icon: Package,
@@ -141,7 +176,7 @@ export default function Dashboard() {
     },
     { 
       title: "Completion Rate", 
-      value: "94%", 
+      value: completionRate, 
       change: "+1.2%", 
       trend: "up",
       icon: CheckCircle2,
@@ -149,9 +184,6 @@ export default function Dashboard() {
       link: "/jobs"
     },
   ];
-
-  const criticalAssets = assets.filter(a => a.status === "Down" || a.status === "Maintenance");
-  const lowStockItems = inventory.filter(i => i.stock < i.minStock);
 
   return (
     <Layout>
@@ -246,32 +278,47 @@ export default function Dashboard() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5 mb-6">
-        {stats.map((stat, index) => (
-          <Link key={index} href={stat.link}>
-            <Card className="shadow-sm hover:shadow-md transition-shadow cursor-pointer h-full">
+        {isLoading ? (
+          Array.from({ length: 5 }).map((_, i) => (
+            <Card key={i} className="shadow-sm h-full">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium hover:text-primary transition-colors">
-                  {stat.title}
-                </CardTitle>
-                <stat.icon className={cn("size-4", stat.color)} />
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="size-4 rounded" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{stat.value}</div>
-                <p className="text-xs text-muted-foreground flex items-center mt-1">
-                  {stat.trend === "up" ? (
-                    <ArrowUpRight className="mr-1 size-3 text-green-500" />
-                  ) : (
-                    <ArrowDownRight className="mr-1 size-3 text-red-500" />
-                  )}
-                  <span className={stat.trend === "up" ? "text-green-500" : "text-red-500"}>
-                    {stat.change}
-                  </span>
-                  <span className="ml-1">vs prev period</span>
-                </p>
+                <Skeleton className="h-8 w-16 mb-2" />
+                <Skeleton className="h-3 w-24" />
               </CardContent>
             </Card>
-          </Link>
-        ))}
+          ))
+        ) : (
+          stats.map((stat, index) => (
+            <Link key={index} href={stat.link}>
+              <Card className="shadow-sm hover:shadow-md transition-shadow cursor-pointer h-full">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium hover:text-primary transition-colors">
+                    {stat.title}
+                  </CardTitle>
+                  <stat.icon className={cn("size-4", stat.color)} />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{stat.value}</div>
+                  <p className="text-xs text-muted-foreground flex items-center mt-1">
+                    {stat.trend === "up" ? (
+                      <ArrowUpRight className="mr-1 size-3 text-green-500" />
+                    ) : (
+                      <ArrowDownRight className="mr-1 size-3 text-red-500" />
+                    )}
+                    <span className={stat.trend === "up" ? "text-green-500" : "text-red-500"}>
+                      {stat.change}
+                    </span>
+                    <span className="ml-1">vs prev period</span>
+                  </p>
+                </CardContent>
+              </Card>
+            </Link>
+          ))
+        )}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7 mb-6">
@@ -361,9 +408,24 @@ export default function Dashboard() {
               </Link>
             </CardHeader>
             <CardContent className="pb-4">
-              {criticalAssets.length > 0 ? (
+              {assetsLoading ? (
                 <div className="space-y-4">
-                  {criticalAssets.map(asset => (
+                  {Array.from({ length: 2 }).map((_, i) => (
+                    <div key={i} className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Skeleton className="size-8 rounded" />
+                        <div>
+                          <Skeleton className="h-4 w-28 mb-1" />
+                          <Skeleton className="h-3 w-20" />
+                        </div>
+                      </div>
+                      <Skeleton className="h-5 w-16 rounded-full" />
+                    </div>
+                  ))}
+                </div>
+              ) : criticalAssets.length > 0 ? (
+                <div className="space-y-4">
+                  {criticalAssets.map((asset: any) => (
                     <div key={asset.id} className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className="size-8 rounded bg-destructive/10 text-destructive flex items-center justify-center font-bold text-xs">
@@ -371,7 +433,7 @@ export default function Dashboard() {
                         </div>
                         <div>
                           <p className="text-sm font-medium leading-none">{asset.name}</p>
-                          <p className="text-xs text-muted-foreground mt-1">{asset.location}</p>
+                          <p className="text-xs text-muted-foreground mt-1">{asset.locationId || "Unknown"}</p>
                         </div>
                       </div>
                       <Badge variant="destructive" className="bg-red-500">{asset.status}</Badge>
@@ -398,9 +460,27 @@ export default function Dashboard() {
               </Link>
             </CardHeader>
             <CardContent className="pb-4">
-              {lowStockItems.length > 0 ? (
+              {inventoryLoading ? (
                 <div className="space-y-4">
-                  {lowStockItems.slice(0, 4).map(item => (
+                  {Array.from({ length: 2 }).map((_, i) => (
+                    <div key={i} className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Skeleton className="size-8 rounded" />
+                        <div>
+                          <Skeleton className="h-4 w-28 mb-1" />
+                          <Skeleton className="h-3 w-20" />
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <Skeleton className="h-4 w-12 mb-1" />
+                        <Skeleton className="h-3 w-10" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : lowStockItems.length > 0 ? (
+                <div className="space-y-4">
+                  {lowStockItems.slice(0, 4).map((item: any) => (
                     <div key={item.id} className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className="size-8 rounded bg-orange-100 text-orange-600 flex items-center justify-center">
@@ -431,4 +511,3 @@ export default function Dashboard() {
     </Layout>
   );
 }
-

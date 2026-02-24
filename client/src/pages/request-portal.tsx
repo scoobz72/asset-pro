@@ -1,6 +1,8 @@
 import Layout from "@/components/Layout";
 import { useMemo, useState } from "react";
-import { assets } from "@/lib/mockData";
+import { useMaintenanceRequests, useAssets } from "@/hooks/use-data";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,53 +17,41 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
-import { ClipboardEdit, Factory, ShieldCheck, Send } from "lucide-react";
-
-type RequestItem = {
-  id: string;
-  title: string;
-  assetId: string | null;
-  area: string;
-  urgency: "Low" | "Medium" | "High";
-  description: string;
-  requestedBy: string;
-  createdAt: Date;
-  status: "Submitted" | "Triaged" | "Converted";
-};
+import { ClipboardEdit, Factory, ShieldCheck, Send, Loader2 } from "lucide-react";
 
 export default function RequestPortal() {
   const { toast } = useToast();
   const [title, setTitle] = useState("");
   const [assetId, setAssetId] = useState<string | null>(null);
   const [area, setArea] = useState("");
-  const [urgency, setUrgency] = useState<RequestItem["urgency"]>("Medium");
+  const [urgency, setUrgency] = useState<"Low" | "Medium" | "High">("Medium");
   const [description, setDescription] = useState("");
   const [requestedBy, setRequestedBy] = useState("Production User");
 
-  const [requests, setRequests] = useState<RequestItem[]>([
-    {
-      id: "REQ-1001",
-      title: "Conveyor making loud noise",
-      assetId: "A-102",
-      area: "Line 1",
-      urgency: "High",
-      description: "Grinding noise started during shift. Please inspect before next run.",
-      requestedBy: "Jamie (Production)",
-      createdAt: new Date(Date.now() - 1000 * 60 * 45),
-      status: "Submitted",
+  const { data: requests = [], isLoading: requestsLoading } = useMaintenanceRequests();
+  const { data: assets = [], isLoading: assetsLoading } = useAssets();
+
+  const createRequestMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("POST", "/api/maintenance-requests", data);
+      return res.json();
     },
-    {
-      id: "REQ-1002",
-      title: "Add PPE gloves in locker",
-      assetId: null,
-      area: "Workshop",
-      urgency: "Low",
-      description: "Stock seems low for size L. Can we top up?",
-      requestedBy: "Sam (Production)",
-      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 5),
-      status: "Triaged",
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/maintenance-requests"] });
+      toast({
+        title: "Request submitted",
+        description: "Maintenance has been notified for triage.",
+      });
+      reset();
     },
-  ]);
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to submit request. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
 
   const reset = () => {
     setTitle("");
@@ -74,33 +64,39 @@ export default function RequestPortal() {
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const next: RequestItem = {
-      id: `REQ-${Math.floor(1000 + Math.random() * 9000)}`,
+    const id = `REQ-${Math.floor(1000 + Math.random() * 9000)}`;
+    createRequestMutation.mutate({
+      id,
       title,
-      assetId,
+      assetId: assetId || null,
       area,
       urgency,
       description,
       requestedBy,
-      createdAt: new Date(),
       status: "Submitted",
-    };
-
-    setRequests((prev) => [next, ...prev]);
-    toast({
-      title: "Request submitted",
-      description: "Maintenance has been notified for triage.",
+      createdAt: new Date().toISOString(),
     });
-    reset();
   };
 
-  const recent = useMemo(() => requests.slice(0, 6), [requests]);
+  const recent = useMemo(() => (requests as any[]).slice(0, 6), [requests]);
 
-  const urgencyBadge = (u: RequestItem["urgency"]) => {
+  const urgencyBadge = (u: string) => {
     if (u === "High") return <Badge variant="destructive">High</Badge>;
     if (u === "Medium") return <Badge variant="secondary" className="bg-blue-50 text-blue-700 border border-blue-200">Medium</Badge>;
     return <Badge variant="outline" className="bg-muted/20">Low</Badge>;
   };
+
+  const isLoading = requestsLoading || assetsLoading;
+
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="size-8 animate-spin text-muted-foreground" />
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -165,7 +161,7 @@ export default function RequestPortal() {
                       <SelectValue placeholder="Select asset" />
                     </SelectTrigger>
                     <SelectContent>
-                      {assets.map((a) => (
+                      {(assets as any[]).map((a: any) => (
                         <SelectItem key={a.id} value={a.id}>
                           {a.name}
                         </SelectItem>
@@ -219,8 +215,14 @@ export default function RequestPortal() {
                   data-testid="button-submit-request"
                   type="submit"
                   className="gap-2"
+                  disabled={createRequestMutation.isPending}
                 >
-                  <Send className="size-4" /> Submit Request
+                  {createRequestMutation.isPending ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Send className="size-4" />
+                  )}
+                  {createRequestMutation.isPending ? "Submitting..." : "Submit Request"}
                 </Button>
                 <Button
                   data-testid="button-reset-request"
@@ -254,41 +256,45 @@ export default function RequestPortal() {
               <Factory className="size-5 text-primary" /> Recent Requests
             </CardTitle>
             <CardDescription>
-              Latest submissions from Production. (Mock data in prototype.)
+              Latest submissions from Production.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {recent.map((r) => {
-              const assetName = r.assetId ? assets.find((a) => a.id === r.assetId)?.name : null;
-              return (
-                <div
-                  key={r.id}
-                  data-testid={`card-request-${r.id}`}
-                  className="p-3 rounded-lg border bg-background hover:bg-muted/20 transition-colors"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs text-muted-foreground">{r.id}</span>
-                        <Badge variant="outline" className="text-[10px]">{r.status}</Badge>
+            {recent.length === 0 ? (
+              <div className="text-center text-muted-foreground py-8">No requests yet.</div>
+            ) : (
+              recent.map((r: any) => {
+                const assetName = r.assetId ? (assets as any[]).find((a: any) => a.id === r.assetId)?.name : null;
+                return (
+                  <div
+                    key={r.id}
+                    data-testid={`card-request-${r.id}`}
+                    className="p-3 rounded-lg border bg-background hover:bg-muted/20 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs text-muted-foreground">{r.id}</span>
+                          <Badge variant="outline" className="text-[10px]">{r.status}</Badge>
+                        </div>
+                        <div className="font-semibold truncate mt-1">{r.title}</div>
+                        <div className="text-sm text-muted-foreground mt-1">
+                          <span className="font-medium text-foreground/90">{r.area}</span>
+                          {assetName ? <span className="text-muted-foreground"> • {assetName}</span> : null}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">Requested by {r.requestedBy}</div>
                       </div>
-                      <div className="font-semibold truncate mt-1">{r.title}</div>
-                      <div className="text-sm text-muted-foreground mt-1">
-                        <span className="font-medium text-foreground/90">{r.area}</span>
-                        {assetName ? <span className="text-muted-foreground"> • {assetName}</span> : null}
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-1">Requested by {r.requestedBy}</div>
-                    </div>
-                    <div className="flex flex-col items-end gap-2 shrink-0">
-                      {urgencyBadge(r.urgency)}
-                      <div className="text-[10px] text-muted-foreground">
-                        {r.createdAt.toLocaleString()}
+                      <div className="flex flex-col items-end gap-2 shrink-0">
+                        {urgencyBadge(r.urgency)}
+                        <div className="text-[10px] text-muted-foreground">
+                          {r.createdAt ? new Date(r.createdAt).toLocaleString() : ""}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </CardContent>
         </Card>
       </div>

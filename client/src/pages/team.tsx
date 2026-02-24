@@ -1,5 +1,5 @@
 import Layout from "@/components/Layout";
-import { users } from "@/lib/mockData";
+import { useUsers } from "@/hooks/use-data";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,19 @@ import { Card, CardHeader, CardContent, CardTitle, CardDescription } from "@/com
 import { Phone, Mail, MoreVertical } from "lucide-react";
 
 export default function Team() {
+  const { data: users, isLoading } = useUsers();
+  const userList = (users as any[] || []);
+
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center h-64">
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </Layout>
+    );
+  }
+
   return (
     <Layout>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
@@ -18,12 +31,12 @@ export default function Team() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {users.map((user) => (
+        {userList.map((user: any) => (
           <Card key={user.id} className="overflow-hidden">
             <CardHeader className="flex flex-row items-center gap-4 pb-2">
               <Avatar className="h-12 w-12 border">
                 <AvatarImage src={user.avatar} />
-                <AvatarFallback>{user.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
+                <AvatarFallback>{(user.name || "").split(" ").map((n: string) => n[0]).join("")}</AvatarFallback>
               </Avatar>
               <div className="flex-1">
                 <CardTitle className="text-lg">{user.name}</CardTitle>
@@ -50,7 +63,7 @@ export default function Team() {
               <div className="grid gap-2">
                 <div className="flex items-center text-sm text-muted-foreground">
                   <Mail className="mr-2 h-4 w-4" />
-                  {user.name.toLowerCase().replace(" ", ".")}@example.com
+                  {user.email || `${(user.name || "").toLowerCase().replace(" ", ".")}@example.com`}
                 </div>
                 <div className="flex items-center text-sm text-muted-foreground">
                   <Phone className="mr-2 h-4 w-4" />

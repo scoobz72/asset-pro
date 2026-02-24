@@ -1,5 +1,7 @@
 import Layout from "@/components/Layout";
-import { purchaseOrders } from "@/lib/mockData";
+import { usePurchaseOrders, useSuppliers, useInventory } from "@/hooks/use-data";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useMutation } from "@tanstack/react-query";
 import { 
   Table, 
   TableBody, 
@@ -50,20 +52,64 @@ import {
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
-// Mock User Roles for demonstration
 type UserRole = "Admin" | "Manager" | "Lead";
 
 export default function PurchaseOrders() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [currentUserRole, setCurrentUserRole] = useState<UserRole>("Admin"); // Toggling this demonstrates permissions
+  const [currentUserRole, setCurrentUserRole] = useState<UserRole>("Admin");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedVendor, setSelectedVendor] = useState("");
 
-  const filteredPOs = purchaseOrders.filter(po => 
-    po.vendor.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    po.id.toLowerCase().includes(searchTerm.toLowerCase())
+  const { data: purchaseOrders, isLoading } = usePurchaseOrders();
+  const { data: suppliers } = useSuppliers();
+
+  const createPOMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("POST", "/api/purchase-orders", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders"] });
+      setDialogOpen(false);
+      setSelectedVendor("");
+    },
+  });
+
+  const updatePOMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const res = await apiRequest("PATCH", `/api/purchase-orders/${id}`, { status });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders"] });
+    },
+  });
+
+  const poList = (purchaseOrders as any[] || []);
+  const supplierList = (suppliers as any[] || []);
+
+  const filteredPOs = poList.filter((po: any) => 
+    (po.vendor || "").toLowerCase().includes(searchTerm.toLowerCase()) || 
+    (po.id || "").toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const canCreatePO = currentUserRole === "Admin" || currentUserRole === "Lead";
   const canApprovePO = currentUserRole === "Admin" || currentUserRole === "Manager";
+
+  const handleCreatePO = () => {
+    if (!selectedVendor) return;
+    const vendor = supplierList.find((s: any) => s.id === selectedVendor);
+    const newId = `PO-${Date.now()}`;
+    createPOMutation.mutate({
+      id: newId,
+      vendor: vendor?.name || selectedVendor,
+      status: "Pending Approval",
+      total: "0",
+      requestedBy: currentUserRole + " User",
+      date: new Date().toISOString().split("T")[0],
+      items: 0,
+    });
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -74,7 +120,7 @@ export default function PurchaseOrders() {
       case "Approved":
         return <Badge variant="outline" className="text-blue-600 bg-blue-50 border-blue-200"><CheckCircle2 className="mr-1 size-3" /> Approved</Badge>;
       case "Received":
-        return <Badge variant="outline" className="text-green-600 bg-green-50 border-green-200"><Box className="mr-1 size-3" /> Received</Badge>;
+        return <Badge variant="outline" className="text-green-600 bg-green-50 border-green-200"><BoxIcon className="mr-1 size-3" /> Received</Badge>;
       case "Rejected":
         return <Badge variant="outline" className="text-red-600 bg-red-50 border-red-200"><Ban className="mr-1 size-3" /> Rejected</Badge>;
       default:
@@ -82,10 +128,19 @@ export default function PurchaseOrders() {
     }
   };
 
-  // Helper Box icon since it's not imported directly above for the badge
-  const Box = ({ className }: { className?: string }) => (
+  const BoxIcon = ({ className }: { className?: string }) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
   );
+
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center h-64">
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -96,7 +151,6 @@ export default function PurchaseOrders() {
         </div>
         
         <div className="flex items-center gap-4">
-          {/* Role Simulator - For demonstration purposes only */}
           <div className="flex items-center gap-2 bg-muted/50 p-1.5 rounded-lg border">
             <span className="text-xs font-medium text-muted-foreground ml-2">Simulate Role:</span>
             <Select value={currentUserRole} onValueChange={(v) => setCurrentUserRole(v as UserRole)}>
@@ -111,7 +165,7 @@ export default function PurchaseOrders() {
             </Select>
           </div>
 
-          <Dialog>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button disabled={!canCreatePO} className={cn(!canCreatePO && "opacity-50 cursor-not-allowed")}>
                 <Plus className="mr-2 size-4" />
@@ -134,14 +188,14 @@ export default function PurchaseOrders() {
                 )}
                 <div className="grid gap-2">
                   <Label htmlFor="vendor">Vendor</Label>
-                  <Select disabled={!canCreatePO}>
+                  <Select disabled={!canCreatePO} value={selectedVendor} onValueChange={setSelectedVendor}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select vendor..." />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="ind">Industrial Supply Co</SelectItem>
-                      <SelectItem value="fluid">Fluid Dynamics Inc</SelectItem>
-                      <SelectItem value="safety">Safety First Gear</SelectItem>
+                      {supplierList.map((s: any) => (
+                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -155,8 +209,14 @@ export default function PurchaseOrders() {
                 </div>
               </div>
               <DialogFooter>
-                <Button variant="outline">Save Draft</Button>
-                <Button type="submit" disabled={!canCreatePO}>Submit for Approval</Button>
+                <Button variant="outline" onClick={() => setDialogOpen(false)}>Save Draft</Button>
+                <Button 
+                  type="submit" 
+                  disabled={!canCreatePO || !selectedVendor || createPOMutation.isPending}
+                  onClick={handleCreatePO}
+                >
+                  {createPOMutation.isPending ? "Submitting..." : "Submit for Approval"}
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -190,7 +250,7 @@ export default function PurchaseOrders() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredPOs.map((po) => (
+            {filteredPOs.map((po: any) => (
               <TableRow key={po.id}>
                 <TableCell className="font-medium font-mono text-xs">
                   {po.id}
@@ -211,7 +271,7 @@ export default function PurchaseOrders() {
                   {po.items}
                 </TableCell>
                 <TableCell className="text-right font-medium">
-                  ${po.total.toFixed(2)}
+                  ${parseFloat(po.total || "0").toFixed(2)}
                 </TableCell>
                 <TableCell>
                   {getStatusBadge(po.status)}
@@ -228,13 +288,13 @@ export default function PurchaseOrders() {
                       <DropdownMenuSeparator />
                       <DropdownMenuItem><FileText className="mr-2 size-4" /> View Details</DropdownMenuItem>
                       
-                      {/* Approval Logic */}
                       {po.status === "Pending Approval" && (
                         <>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem 
                             disabled={!canApprovePO} 
                             className={cn("text-green-600 focus:text-green-600", !canApprovePO && "opacity-50")}
+                            onClick={() => canApprovePO && updatePOMutation.mutate({ id: po.id, status: "Approved" })}
                           >
                             <CheckCircle2 className="mr-2 size-4" /> Approve Order
                             {!canApprovePO && <span className="ml-2 text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">Admin/Mgr Only</span>}
@@ -242,6 +302,7 @@ export default function PurchaseOrders() {
                           <DropdownMenuItem 
                             disabled={!canApprovePO} 
                             className={cn("text-red-600 focus:text-red-600", !canApprovePO && "opacity-50")}
+                            onClick={() => canApprovePO && updatePOMutation.mutate({ id: po.id, status: "Rejected" })}
                           >
                             <Ban className="mr-2 size-4" /> Reject
                           </DropdownMenuItem>

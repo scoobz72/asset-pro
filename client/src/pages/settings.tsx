@@ -4,8 +4,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { User, Shield, Upload, FileSpreadsheet, Download } from "lucide-react";
+import { User, Shield, Upload, FileSpreadsheet, Download, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { useUsers } from "@/hooks/use-data";
 
 export default function Settings({ 
   defaultLandingPage, 
@@ -17,6 +18,9 @@ export default function Settings({
   const { toast } = useToast();
   const [isUploading, setIsUploading] = useState<string | null>(null);
 
+  const { data: users = [], isLoading: usersLoading } = useUsers();
+  const currentUser = (users as any[])[0];
+
   const handleSave = () => {
     toast({
       title: "Settings Saved",
@@ -26,7 +30,6 @@ export default function Settings({
 
   const handleImport = (type: string) => {
     setIsUploading(type);
-    // Simulate file upload and processing
     setTimeout(() => {
       setIsUploading(null);
       toast({
@@ -54,20 +57,28 @@ export default function Settings({
               <CardDescription>Update your personal information.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label>Name</Label>
-                <div className="p-2 border rounded-md bg-muted/50 text-sm">John Doe</div>
-              </div>
-              <div className="space-y-2">
-                <Label>Email</Label>
-                <div className="p-2 border rounded-md bg-muted/50 text-sm">john.doe@company.com</div>
-              </div>
-              <div className="space-y-2">
-                <Label>Role</Label>
-                <div className="flex items-center gap-2 p-2 border rounded-md bg-muted/50 text-sm">
-                  <Shield className="size-4 text-primary" /> System Admin
+              {usersLoading ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="size-6 animate-spin text-muted-foreground" />
                 </div>
-              </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <Label>Name</Label>
+                    <div className="p-2 border rounded-md bg-muted/50 text-sm">{currentUser?.name || "John Doe"}</div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Email</Label>
+                    <div className="p-2 border rounded-md bg-muted/50 text-sm">{currentUser?.email || "john.doe@company.com"}</div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Role</Label>
+                    <div className="flex items-center gap-2 p-2 border rounded-md bg-muted/50 text-sm">
+                      <Shield className="size-4 text-primary" /> {currentUser?.role || "System Admin"}
+                    </div>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
 

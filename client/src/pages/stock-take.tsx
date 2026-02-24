@@ -1,6 +1,8 @@
 import Layout from "@/components/Layout";
 import { useState } from "react";
-import { inventory, locations } from "@/lib/mockData";
+import { useInventory, useLocations } from "@/hooks/use-data";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -21,7 +23,8 @@ import {
   ArrowRight,
   Save,
   AlertTriangle,
-  History
+  History,
+  Loader2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -41,9 +44,14 @@ export default function StockTake() {
   const [searchQuery, setSearchQuery] = useState("");
   const [countedItems, setCountedItems] = useState<Record<string, number>>({});
   const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // Get unique locations from inventory, or use the locations list
-  const inventoryLocations = Array.from(new Set(inventory.map(item => item.location))).sort();
+  const { data: inventoryData = [], isLoading: inventoryLoading } = useInventory();
+  const { data: locationsData = [], isLoading: locationsLoading } = useLocations();
+
+  const inventory = inventoryData as any[];
+
+  const inventoryLocations = Array.from(new Set(inventory.map((item: any) => item.location))).sort();
 
   const handleLocationToggle = (loc: string) => {
     setSelectedLocations(prev => 
@@ -52,6 +60,12 @@ export default function StockTake() {
         : [...prev, loc]
     );
   };
+
+  const filteredInventory = inventory.filter((item: any) => 
+    selectedLocations.includes(item.location) &&
+    (item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+     item.id.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
 
   const startStockTake = () => {
     if (selectedLocations.length === 0) {
@@ -63,10 +77,9 @@ export default function StockTake() {
       return;
     }
     
-    // Initialize count state with current stock
     const initialCounts: Record<string, number> = {};
     const initialReasons: Record<string, string> = {};
-    filteredInventory.forEach(item => {
+    filteredInventory.forEach((item: any) => {
       initialCounts[item.id] = item.stock;
     });
     setCountedItems(initialCounts);
@@ -79,7 +92,6 @@ export default function StockTake() {
     if (!isNaN(num) && num >= 0) {
       setCountedItems(prev => ({ ...prev, [id]: num }));
       
-      // Auto-assign default reasons based on variance
       const variance = num - currentStock;
       if (variance > 0) {
         setReasons(prev => ({ ...prev, [id]: "Stock In" }));
@@ -93,10 +105,9 @@ export default function StockTake() {
         });
       }
     } else if (value === "") {
-      // Allow empty temporarily while typing, but default to 0 on blur
       setCountedItems(prev => {
         const next = { ...prev };
-        delete next[id]; // removes it so input becomes empty
+        delete next[id];
         return next;
       });
       setReasons(prev => {
@@ -111,25 +122,71 @@ export default function StockTake() {
     setReasons(prev => ({ ...prev, [id]: reason }));
   };
 
-  const submitStockTake = () => {
-    toast({
-      title: "Cycle Check Completed",
-      description: `Successfully updated stock counts. Date stamps and reasons have been logged.`,
-    });
-    // In a real app, this would create transaction logs with the selected reasons and date stamps
-    setTimeout(() => {
-      setStep(1);
-      setSelectedLocations([]);
-      setCountedItems({});
-      setReasons({});
-    }, 1500);
+  const submitStockTake = async () => {
+    setIsSubmitting(true);
+    try {
+      const promises: Promise<any>[] = [];
+
+      for (const item of filteredInventory) {
+        const count = countedItems[item.id];
+        if (count === undefined) continue;
+        const variance = count - item.stock;
+        if (variance !== 0) {
+          promises.push(
+            apiRequest("POST", "/api/transactions", {
+              date: new Date().toISOString(),
+              partId: item.id,
+              partName: item.name,
+              type: reasons[item.id] || (variance > 0 ? "Stock In" : "Stock Out - Missing"),
+              quantity: variance,
+              userId: "System",
+              reference: "Cycle Check",
+            })
+          );
+          promises.push(
+            apiRequest("PATCH", `/api/inventory/${item.id}`, {
+              stock: count,
+            })
+          );
+        }
+      }
+
+      await Promise.all(promises);
+
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inventory"] });
+
+      toast({
+        title: "Cycle Check Completed",
+        description: `Successfully updated stock counts. Date stamps and reasons have been logged.`,
+      });
+
+      setTimeout(() => {
+        setStep(1);
+        setSelectedLocations([]);
+        setCountedItems({});
+        setReasons({});
+      }, 1500);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to submit stock take. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const filteredInventory = inventory.filter(item => 
-    selectedLocations.includes(item.location) &&
-    (item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-     item.id.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  if (inventoryLoading) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="size-8 animate-spin text-muted-foreground" />
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -151,8 +208,9 @@ export default function StockTake() {
               <Button variant="outline" onClick={() => setStep(1)}>
                 Back to Selection
               </Button>
-              <Button onClick={submitStockTake} className="gap-2">
-                <Save className="size-4" /> Complete Cycle Check
+              <Button onClick={submitStockTake} className="gap-2" disabled={isSubmitting}>
+                {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                {isSubmitting ? "Submitting..." : "Complete Cycle Check"}
               </Button>
             </>
           )}
@@ -202,7 +260,7 @@ export default function StockTake() {
                         <label htmlFor={`loc-${loc}`} className="text-sm font-medium leading-none cursor-pointer flex justify-between w-full">
                           <span>{loc}</span>
                           <Badge variant="secondary" className="text-xs">
-                            {inventory.filter(i => i.location === loc).length} items
+                            {inventory.filter((i: any) => i.location === loc).length} items
                           </Badge>
                         </label>
                       </div>
@@ -276,7 +334,7 @@ export default function StockTake() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredInventory.map((item) => {
+                  filteredInventory.map((item: any) => {
                     const count = countedItems[item.id] !== undefined ? countedItems[item.id] : '';
                     const numCount = typeof count === 'number' ? count : 0;
                     const variance = numCount - item.stock;

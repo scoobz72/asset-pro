@@ -1,5 +1,5 @@
 import Layout from "@/components/Layout";
-import { stockTransactions } from "@/lib/mockData";
+import { useTransactions } from "@/hooks/use-data";
 import { 
   Table, 
   TableBody, 
@@ -34,11 +34,12 @@ import { useState } from "react";
 
 export default function Transactions() {
   const [searchTerm, setSearchTerm] = useState("");
+  const { data: transactions, isLoading } = useTransactions();
 
-  const filteredTransactions = stockTransactions.filter(txn => 
-    txn.partName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    txn.partId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    txn.reference.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredTransactions = (transactions as any[] || []).filter((txn: any) => 
+    (txn.partName || "").toLowerCase().includes(searchTerm.toLowerCase()) || 
+    (txn.partId || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (txn.reference || "").toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const getTransactionIcon = (type: string) => {
@@ -78,6 +79,16 @@ export default function Transactions() {
         return <Badge variant="outline">{type}</Badge>;
     }
   };
+
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center h-64">
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -137,7 +148,7 @@ export default function Transactions() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredTransactions.map((txn) => (
+            {filteredTransactions.map((txn: any) => (
               <TableRow key={txn.id}>
                 <TableCell className="whitespace-nowrap">
                   <div className="text-sm font-medium">{format(new Date(txn.date), "MMM d, yyyy")}</div>
@@ -168,7 +179,7 @@ export default function Transactions() {
                   {txn.reference}
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
-                  {txn.user}
+                  {txn.userId}
                 </TableCell>
               </TableRow>
             ))}

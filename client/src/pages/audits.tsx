@@ -1,5 +1,7 @@
 import Layout from "@/components/Layout";
-import { assetAudits, assets } from "@/lib/mockData";
+import { useAudits, useAssets, useUsers, useLocations } from "@/hooks/use-data";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useMutation } from "@tanstack/react-query";
 import { 
   Table, 
   TableBody, 
@@ -37,7 +39,8 @@ import {
   CheckCircle2,
   AlertTriangle,
   Clock,
-  ScanLine
+  ScanLine,
+  Loader2
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -50,15 +53,77 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Audits() {
+  const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [isMobileScannerOpen, setIsMobileScannerOpen] = useState(false);
   const [selectedAudit, setSelectedAudit] = useState<string | null>(null);
 
-  const filteredAudits = assetAudits.filter(audit => 
-    audit.assetId.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    audit.assignedTo.toLowerCase().includes(searchTerm.toLowerCase())
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduleScope, setScheduleScope] = useState("location");
+  const [scheduleArea, setScheduleArea] = useState("");
+  const [scheduleAssignee, setScheduleAssignee] = useState("");
+  const [scheduleDate, setScheduleDate] = useState("");
+
+  const [conductOpen, setConductOpen] = useState<number | null>(null);
+  const [conductVerified, setConductVerified] = useState(true);
+  const [conductNewLocation, setConductNewLocation] = useState("");
+  const [conductNotes, setConductNotes] = useState("");
+
+  const { data: audits = [], isLoading: auditsLoading } = useAudits();
+  const { data: assets = [], isLoading: assetsLoading } = useAssets();
+  const { data: users = [] } = useUsers();
+  const { data: locations = [] } = useLocations();
+
+  const createAuditMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("POST", "/api/audits", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/audits"] });
+      toast({ title: "Audit Scheduled", description: "The audit has been scheduled successfully." });
+      setScheduleOpen(false);
+      setScheduleScope("location");
+      setScheduleArea("");
+      setScheduleAssignee("");
+      setScheduleDate("");
+    },
+  });
+
+  const conductAuditMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: any }) => {
+      const res = await apiRequest("PATCH", `/api/audits/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/audits"] });
+      toast({ title: "Audit Submitted", description: "The audit result has been recorded." });
+      setConductOpen(null);
+      setConductVerified(true);
+      setConductNewLocation("");
+      setConductNotes("");
+    },
+  });
+
+  const resolveAuditMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("PATCH", `/api/audits/${id}`, { status: "Resolved" });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/audits"] });
+      toast({ title: "Discrepancy Resolved", description: "The audit discrepancy has been resolved." });
+    },
+  });
+
+  const isLoading = auditsLoading || assetsLoading;
+
+  const filteredAudits = (audits as any[]).filter((audit: any) => 
+    (audit.assetId || "").toLowerCase().includes(searchTerm.toLowerCase()) || 
+    (audit.assignedTo || "").toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const getStatusBadge = (status: string) => {
@@ -71,15 +136,48 @@ export default function Audits() {
         return <Badge variant="outline" className="text-green-600 bg-green-50 border-green-200"><CheckCircle2 className="mr-1 size-3" /> Verified</Badge>;
       case "Discrepancy":
         return <Badge variant="outline" className="text-red-600 bg-red-50 border-red-200"><AlertTriangle className="mr-1 size-3" /> Discrepancy</Badge>;
+      case "Resolved":
+        return <Badge variant="outline" className="text-green-600 bg-green-50 border-green-200"><CheckCircle2 className="mr-1 size-3" /> Resolved</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
   };
 
-  // Helper Calendar icon
   const Calendar = ({ className }: { className?: string }) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
   );
+
+  const handleScheduleAudit = () => {
+    if (!scheduleArea || !scheduleAssignee || !scheduleDate) return;
+    const assigneeUser = (users as any[]).find((u: any) => String(u.id) === scheduleAssignee);
+    createAuditMutation.mutate({
+      assetId: scheduleArea,
+      status: "Scheduled",
+      scheduledDate: scheduleDate,
+      assignedTo: assigneeUser?.name || scheduleAssignee,
+      expectedLocation: (locations as any[]).find((l: any) => l.id === scheduleArea)?.name || scheduleArea,
+    });
+  };
+
+  const handleConductAudit = (audit: any) => {
+    const data: any = {
+      status: conductVerified ? "Completed" : "Discrepancy",
+      verifiedLocation: conductVerified ? audit.expectedLocation : conductNewLocation,
+      completionDate: new Date().toISOString(),
+      notes: conductNotes || undefined,
+    };
+    conductAuditMutation.mutate({ id: audit.id, data });
+  };
+
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="size-8 animate-spin text-muted-foreground" />
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -89,7 +187,6 @@ export default function Audits() {
           <p className="text-muted-foreground mt-1">Schedule and conduct physical checks to maintain an accurate asset map.</p>
         </div>
         <div className="flex gap-2">
-          {/* Mobile QR Scanner Simulation */}
           <Dialog open={isMobileScannerOpen} onOpenChange={setIsMobileScannerOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" className="border-primary text-primary hover:bg-primary/5">
@@ -105,7 +202,6 @@ export default function Audits() {
                 </DialogDescription>
               </DialogHeader>
               <div className="aspect-square bg-black rounded-md overflow-hidden relative flex items-center justify-center border-4 border-muted">
-                {/* Simulated Camera Viewfinder */}
                 <div className="absolute inset-8 border-2 border-green-500/50 rounded-lg">
                   <div className="absolute -top-1 -left-1 size-4 border-t-4 border-l-4 border-green-500" />
                   <div className="absolute -top-1 -right-1 size-4 border-t-4 border-r-4 border-green-500" />
@@ -119,14 +215,13 @@ export default function Audits() {
                 <Button variant="ghost" onClick={() => setIsMobileScannerOpen(false)}>Cancel</Button>
                 <Button onClick={() => {
                   setIsMobileScannerOpen(false);
-                  // In a real app, this would trigger the audit flow for the scanned asset
                   setTimeout(() => alert("Simulated scan successful for Asset A-101"), 300);
                 }}>Simulate Scan</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
 
-          <Dialog>
+          <Dialog open={scheduleOpen} onOpenChange={setScheduleOpen}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="mr-2 size-4" />
@@ -143,7 +238,7 @@ export default function Audits() {
               <div className="grid gap-4 py-4">
                 <div className="grid gap-2">
                   <Label htmlFor="auditType">Audit Scope</Label>
-                  <Select defaultValue="location">
+                  <Select value={scheduleScope} onValueChange={setScheduleScope}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select scope..." />
                     </SelectTrigger>
@@ -155,42 +250,39 @@ export default function Audits() {
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="location">Target Area</Label>
-                  <Select>
+                  <Select value={scheduleArea} onValueChange={setScheduleArea}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select area to audit..." />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="b-a">Building A</SelectItem>
-                      <SelectItem value="b-b">Building B</SelectItem>
-                      <SelectItem value="roof">Roof</SelectItem>
-                      <SelectItem value="base">Basement</SelectItem>
-                      <SelectItem value="work">Workshop</SelectItem>
-                      <SelectItem value="line-1">Line 1 (Packaging)</SelectItem>
-                      <SelectItem value="line-2">Line 2 (Assembly)</SelectItem>
+                      {(locations as any[]).map((loc: any) => (
+                        <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="assignee">Assign Auditor</Label>
-                  <Select>
+                  <Select value={scheduleAssignee} onValueChange={setScheduleAssignee}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select team member..." />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="1">John Doe</SelectItem>
-                      <SelectItem value="2">Sarah Smith</SelectItem>
-                      <SelectItem value="3">Mike Johnson</SelectItem>
-                      <SelectItem value="4">Emily Davis</SelectItem>
+                      {(users as any[]).map((user: any) => (
+                        <SelectItem key={user.id} value={String(user.id)}>{user.name}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="date">Scheduled Date</Label>
-                  <Input type="date" id="date" />
+                  <Input type="date" id="date" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)} />
                 </div>
               </div>
               <DialogFooter>
-                <Button type="submit">Schedule Bulk Audit</Button>
+                <Button onClick={handleScheduleAudit} disabled={createAuditMutation.isPending}>
+                  {createAuditMutation.isPending ? "Scheduling..." : "Schedule Bulk Audit"}
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -223,8 +315,8 @@ export default function Audits() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredAudits.map((audit) => {
-              const asset = assets.find(a => a.id === audit.assetId);
+            {filteredAudits.map((audit: any) => {
+              const asset = (assets as any[]).find((a: any) => a.id === audit.assetId);
               
               return (
                 <TableRow key={audit.id}>
@@ -252,7 +344,16 @@ export default function Audits() {
                   </TableCell>
                   <TableCell className="text-right">
                     {(audit.status === "Pending" || audit.status === "Scheduled") && (
-                      <Dialog>
+                      <Dialog open={conductOpen === audit.id} onOpenChange={(open) => {
+                        if (open) {
+                          setConductOpen(audit.id);
+                          setConductVerified(true);
+                          setConductNewLocation("");
+                          setConductNotes("");
+                        } else {
+                          setConductOpen(null);
+                        }
+                      }}>
                         <DialogTrigger asChild>
                           <Button size="sm" variant="outline" className="mr-2 border-primary/50 hover:bg-primary/5">
                             Conduct
@@ -274,11 +375,11 @@ export default function Audits() {
                               <Label>Is the asset in its expected location?</Label>
                               <div className="flex gap-4">
                                 <label className="flex items-center gap-2 border rounded-md p-3 flex-1 cursor-pointer hover:bg-muted/50 [&:has(:checked)]:border-green-500 [&:has(:checked)]:bg-green-500/5">
-                                  <input type="radio" name="locationCheck" className="accent-green-600" defaultChecked />
+                                  <input type="radio" name="locationCheck" className="accent-green-600" checked={conductVerified} onChange={() => setConductVerified(true)} />
                                   <div className="font-medium text-sm">Yes, Verified</div>
                                 </label>
                                 <label className="flex items-center gap-2 border rounded-md p-3 flex-1 cursor-pointer hover:bg-muted/50 [&:has(:checked)]:border-red-500 [&:has(:checked)]:bg-red-500/5">
-                                  <input type="radio" name="locationCheck" className="accent-red-600" />
+                                  <input type="radio" name="locationCheck" className="accent-red-600" checked={!conductVerified} onChange={() => setConductVerified(false)} />
                                   <div className="font-medium text-sm">No, Moved</div>
                                 </label>
                               </div>
@@ -286,36 +387,41 @@ export default function Audits() {
 
                             <div className="grid gap-2">
                               <Label htmlFor="newLocation">Update Location (If Moved)</Label>
-                              <Select>
+                              <Select value={conductNewLocation} onValueChange={setConductNewLocation}>
                                 <SelectTrigger>
                                   <SelectValue placeholder="Select current physical location..." />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="Building A">Building A</SelectItem>
-                                  <SelectItem value="Building B">Building B</SelectItem>
-                                  <SelectItem value="Roof">Roof</SelectItem>
-                                  <SelectItem value="Basement">Basement</SelectItem>
-                                  <SelectItem value="Workshop">Workshop</SelectItem>
-                                  <SelectItem value="Storage">Storage</SelectItem>
+                                  {(locations as any[]).map((loc: any) => (
+                                    <SelectItem key={loc.id} value={loc.name}>{loc.name}</SelectItem>
+                                  ))}
                                 </SelectContent>
                               </Select>
                             </div>
                             
                             <div className="grid gap-2">
                               <Label htmlFor="notes">Audit Notes</Label>
-                              <Textarea id="notes" placeholder="Any issues found or reason for move..." />
+                              <Textarea id="notes" placeholder="Any issues found or reason for move..." value={conductNotes} onChange={(e) => setConductNotes(e.target.value)} />
                             </div>
                           </div>
                           <DialogFooter>
-                            <Button type="submit">Submit Audit</Button>
+                            <Button onClick={() => handleConductAudit(audit)} disabled={conductAuditMutation.isPending}>
+                              {conductAuditMutation.isPending ? "Submitting..." : "Submit Audit"}
+                            </Button>
                           </DialogFooter>
                         </DialogContent>
                       </Dialog>
                     )}
 
                     {audit.status === "Discrepancy" && (
-                      <Button size="sm" variant="outline" className="mr-2 text-red-600 border-red-200 hover:bg-red-50">
-                        Resolve
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        className="mr-2 text-red-600 border-red-200 hover:bg-red-50"
+                        onClick={() => resolveAuditMutation.mutate(audit.id)}
+                        disabled={resolveAuditMutation.isPending}
+                      >
+                        {resolveAuditMutation.isPending ? "Resolving..." : "Resolve"}
                       </Button>
                     )}
 
