@@ -51,6 +51,8 @@ const baseData = [
   { completed: 1, opened: 0 },
 ];
 
+import { Link } from "wouter";
+
 const chartData = baseData.map((data, i) => ({
   name: format(subDays(new Date(), 6 - i), 'MMM dd'),
   ...data
@@ -107,7 +109,8 @@ export default function Dashboard() {
       change: "+2.5%", 
       trend: "up",
       icon: Clock,
-      color: "text-blue-500"
+      color: "text-blue-500",
+      link: "/jobs"
     },
     { 
       title: "MTBF", 
@@ -115,7 +118,8 @@ export default function Dashboard() {
       change: "+15 hrs", 
       trend: "up",
       icon: Wrench,
-      color: "text-indigo-500"
+      color: "text-indigo-500",
+      link: "/assets"
     },
     { 
       title: "Critical Assets Down", 
@@ -123,7 +127,8 @@ export default function Dashboard() {
       change: "-1", 
       trend: "down",
       icon: AlertTriangle,
-      color: "text-destructive"
+      color: "text-destructive",
+      link: "/assets"
     },
     { 
       title: "Low Stock Items", 
@@ -131,7 +136,8 @@ export default function Dashboard() {
       change: "+2", 
       trend: "up",
       icon: Package,
-      color: "text-orange-500"
+      color: "text-orange-500",
+      link: "/inventory"
     },
     { 
       title: "Completion Rate", 
@@ -139,7 +145,8 @@ export default function Dashboard() {
       change: "+1.2%", 
       trend: "up",
       icon: CheckCircle2,
-      color: "text-green-500"
+      color: "text-green-500",
+      link: "/jobs"
     },
   ];
 
@@ -240,28 +247,30 @@ export default function Dashboard() {
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5 mb-6">
         {stats.map((stat, index) => (
-          <Card key={index} className="shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                {stat.title}
-              </CardTitle>
-              <stat.icon className={cn("size-4", stat.color)} />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stat.value}</div>
-              <p className="text-xs text-muted-foreground flex items-center mt-1">
-                {stat.trend === "up" ? (
-                  <ArrowUpRight className="mr-1 size-3 text-green-500" />
-                ) : (
-                  <ArrowDownRight className="mr-1 size-3 text-red-500" />
-                )}
-                <span className={stat.trend === "up" ? "text-green-500" : "text-red-500"}>
-                  {stat.change}
-                </span>
-                <span className="ml-1">vs prev period</span>
-              </p>
-            </CardContent>
-          </Card>
+          <Link key={index} href={stat.link}>
+            <Card className="shadow-sm hover:shadow-md transition-shadow cursor-pointer h-full">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium hover:text-primary transition-colors">
+                  {stat.title}
+                </CardTitle>
+                <stat.icon className={cn("size-4", stat.color)} />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stat.value}</div>
+                <p className="text-xs text-muted-foreground flex items-center mt-1">
+                  {stat.trend === "up" ? (
+                    <ArrowUpRight className="mr-1 size-3 text-green-500" />
+                  ) : (
+                    <ArrowDownRight className="mr-1 size-3 text-red-500" />
+                  )}
+                  <span className={stat.trend === "up" ? "text-green-500" : "text-red-500"}>
+                    {stat.change}
+                  </span>
+                  <span className="ml-1">vs prev period</span>
+                </p>
+              </CardContent>
+            </Card>
+          </Link>
         ))}
       </div>
 
@@ -342,11 +351,14 @@ export default function Dashboard() {
           </Card>
 
           <Card className="shadow-sm">
-            <CardHeader className="py-4">
+            <CardHeader className="py-4 flex flex-row items-center justify-between">
               <CardTitle className="text-base flex items-center">
                 <AlertOctagon className="size-4 mr-2 text-destructive" />
                 Critical Asset Alerts
               </CardTitle>
+              <Link href="/assets">
+                <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground">View all</Button>
+              </Link>
             </CardHeader>
             <CardContent className="pb-4">
               {criticalAssets.length > 0 ? (
@@ -376,11 +388,14 @@ export default function Dashboard() {
           </Card>
 
           <Card className="shadow-sm">
-            <CardHeader className="py-4">
+            <CardHeader className="py-4 flex flex-row items-center justify-between">
               <CardTitle className="text-base flex items-center">
                 <Package className="size-4 mr-2 text-orange-500" />
                 Low Stock Alerts
               </CardTitle>
+              <Link href="/inventory">
+                <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground">View all</Button>
+              </Link>
             </CardHeader>
             <CardContent className="pb-4">
               {lowStockItems.length > 0 ? (
