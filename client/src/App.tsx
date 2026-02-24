@@ -21,6 +21,7 @@ import Locations from "@/pages/locations";
 import Auth from "@/pages/auth";
 import Settings from "@/pages/settings";
 import StockTake from "@/pages/stock-take";
+import Landing from "@/pages/landing";
 
 function Router({ defaultLandingPage, setDefaultLandingPage }: any) {
   return (
@@ -52,11 +53,13 @@ function Router({ defaultLandingPage, setDefaultLandingPage }: any) {
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentCompany, setCurrentCompany] = useState<string | null>(null);
   const [defaultLandingPage, setDefaultLandingPage] = useState("/");
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
 
-  const handleLogin = () => {
+  const handleLogin = (companyName?: string) => {
     setIsAuthenticated(true);
+    if (companyName) setCurrentCompany(companyName);
     setLocation(defaultLandingPage);
   };
 
@@ -65,12 +68,41 @@ function App() {
       <TooltipProvider>
         <Toaster />
         {!isAuthenticated ? (
-          <Auth onLogin={handleLogin} />
+          <Switch>
+            <Route path="/login">
+              <Auth onLogin={handleLogin} defaultTab="login" />
+            </Route>
+            <Route path="/register">
+              <Auth onLogin={handleLogin} defaultTab="register" />
+            </Route>
+            <Route path="/">
+              <Landing />
+            </Route>
+            <Route>
+              <Landing />
+            </Route>
+          </Switch>
         ) : (
-          <Router 
-            defaultLandingPage={defaultLandingPage}
-            setDefaultLandingPage={setDefaultLandingPage}
-          />
+          <>
+            {/* Mock Subdomain Banner */}
+            <div className="bg-primary text-primary-foreground text-xs py-1.5 px-4 flex justify-between items-center z-50 relative">
+              <div className="flex items-center gap-2 font-mono">
+                <span className="opacity-70">Secured Tenant Domain:</span>
+                <span className="font-semibold">
+                  {currentCompany 
+                    ? `https://${currentCompany.toLowerCase().replace(/[^a-z0-9]/g, '')}.promaintain.app` 
+                    : "https://demo.promaintain.app"}
+                </span>
+              </div>
+              <div className="hidden sm:block opacity-80">
+                {currentCompany ? `${currentCompany} Workspace` : "Demo Workspace"}
+              </div>
+            </div>
+            <Router 
+              defaultLandingPage={defaultLandingPage}
+              setDefaultLandingPage={setDefaultLandingPage}
+            />
+          </>
         )}
       </TooltipProvider>
     </QueryClientProvider>
