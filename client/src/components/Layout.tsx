@@ -18,7 +18,8 @@ import {
   ShoppingCart,
   Truck,
   ScanLine,
-  MapPin
+  MapPin,
+  ClipboardEdit
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +37,7 @@ import { useState } from "react";
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+  { name: 'Request Portal', href: '/request-portal', icon: ClipboardEdit },
   { name: 'Jobs', href: '/jobs', icon: ClipboardList },
   { name: 'Templates', href: '/templates', icon: FileSignature },
   { name: 'Assets', href: '/assets', icon: Box },
