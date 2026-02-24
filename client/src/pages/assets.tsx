@@ -26,7 +26,9 @@ import {
   FolderTree,
   List,
   Building2,
-  Box
+  Box,
+  Upload,
+  Map as MapIcon
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -54,8 +56,11 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 
+import floorplanImg from "@/assets/images/floorplan.jpg";
+
 export default function Assets() {
   const [assets, setAssets] = useState(initialAssets);
+  const [uploadedDrawing, setUploadedDrawing] = useState<string | null>(null);
   const { toast } = useToast();
 
   const handleLocationChange = (assetId: string, newLocation: string) => {
@@ -86,6 +91,7 @@ export default function Assets() {
           <TabsList>
             <TabsTrigger value="list" className="gap-2"><List className="size-4" /> List View</TabsTrigger>
             <TabsTrigger value="topology" className="gap-2"><FolderTree className="size-4" /> Topology Map</TabsTrigger>
+            <TabsTrigger value="drawing" className="gap-2"><MapIcon className="size-4" /> Floor Plan</TabsTrigger>
           </TabsList>
           
           <div className="relative w-full sm:max-w-sm flex-1">
@@ -378,6 +384,130 @@ export default function Assets() {
                   })}
                 </div>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="drawing" className="m-0">
+          <Card className="shadow-sm border-primary/20 overflow-hidden">
+            <CardHeader className="pb-3 border-b bg-muted/10 flex flex-row items-start justify-between">
+              <div>
+                <CardTitle>Floor Plan & Drawings</CardTitle>
+                <CardDescription>Upload CAD or PDF drawings to map assets visually.</CardDescription>
+              </div>
+              {uploadedDrawing && (
+                <Button variant="outline" size="sm" onClick={() => setUploadedDrawing(null)}>
+                  Remove Drawing
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent className="p-0">
+              {!uploadedDrawing ? (
+                <div className="flex flex-col items-center justify-center py-24 px-4 text-center bg-muted/5 min-h-[500px]">
+                  <div className="size-20 rounded-full bg-primary/10 flex items-center justify-center mb-6">
+                    <Upload className="size-10 text-primary/70" />
+                  </div>
+                  <h3 className="text-xl font-bold mb-2">Upload a Floor Plan</h3>
+                  <p className="text-muted-foreground max-w-md mx-auto mb-8">
+                    Upload a PDF, blueprint, or CAD drawing to place interactive CMMS asset markers directly on top of your facility layout.
+                  </p>
+                  <Button onClick={() => setUploadedDrawing(floorplanImg)} className="gap-2">
+                    <Upload className="size-4" /> Browse Files
+                  </Button>
+                </div>
+              ) : (
+                <div className="relative min-h-[600px] w-full bg-muted overflow-hidden group">
+                  <img 
+                    src={uploadedDrawing} 
+                    alt="Floor Plan" 
+                    className="w-full h-full object-cover opacity-60 mix-blend-multiply"
+                  />
+                  
+                  {/* Simulated dropped pins */}
+                  <div className="absolute top-[25%] left-[30%] -translate-x-1/2 -translate-y-1/2">
+                    <HoverCard>
+                      <HoverCardTrigger asChild>
+                        <button className="flex flex-col items-center group cursor-pointer">
+                          <div className="bg-green-500 text-white rounded-full p-2 shadow-lg mb-1 group-hover:scale-110 transition-transform ring-4 ring-green-500/20">
+                            <Activity className="size-4" />
+                          </div>
+                          <Badge variant="secondary" className="shadow-sm font-bold border-green-500/30">CNC Machine X1</Badge>
+                        </button>
+                      </HoverCardTrigger>
+                      <HoverCardContent className="w-64">
+                        <div className="flex justify-between items-start mb-2">
+                          <h4 className="font-bold">CNC Machine X1</h4>
+                          <Badge className="bg-green-500">Operational</Badge>
+                        </div>
+                        <div className="text-sm text-muted-foreground space-y-1 mb-3">
+                          <p>ID: A-301</p>
+                          <p>Health: 88%</p>
+                        </div>
+                        <Button size="sm" className="w-full h-8">View Details</Button>
+                      </HoverCardContent>
+                    </HoverCard>
+                  </div>
+
+                  <div className="absolute top-[45%] left-[65%] -translate-x-1/2 -translate-y-1/2">
+                    <HoverCard>
+                      <HoverCardTrigger asChild>
+                        <button className="flex flex-col items-center group cursor-pointer">
+                          <div className="bg-yellow-500 text-white rounded-full p-2 shadow-lg mb-1 group-hover:scale-110 transition-transform ring-4 ring-yellow-500/20 animate-pulse">
+                            <Wrench className="size-4" />
+                          </div>
+                          <Badge variant="secondary" className="shadow-sm font-bold border-yellow-500/30">Conveyor Belt Main</Badge>
+                        </button>
+                      </HoverCardTrigger>
+                      <HoverCardContent className="w-64">
+                        <div className="flex justify-between items-start mb-2">
+                          <h4 className="font-bold">Conveyor Belt Main</h4>
+                          <Badge className="bg-yellow-500">Maintenance</Badge>
+                        </div>
+                        <div className="text-sm text-muted-foreground space-y-1 mb-3">
+                          <p>ID: A-102</p>
+                          <p>Health: 45%</p>
+                        </div>
+                        <Button size="sm" className="w-full h-8">View Work Order</Button>
+                      </HoverCardContent>
+                    </HoverCard>
+                  </div>
+
+                  <div className="absolute top-[70%] left-[20%] -translate-x-1/2 -translate-y-1/2">
+                    <HoverCard>
+                      <HoverCardTrigger asChild>
+                        <button className="flex flex-col items-center group cursor-pointer">
+                          <div className="bg-red-500 text-white rounded-full p-2 shadow-lg mb-1 group-hover:scale-110 transition-transform ring-4 ring-red-500/20">
+                            <Activity className="size-4" />
+                          </div>
+                          <Badge variant="secondary" className="shadow-sm font-bold border-red-500/30">Generator Backup</Badge>
+                        </button>
+                      </HoverCardTrigger>
+                      <HoverCardContent className="w-64">
+                        <div className="flex justify-between items-start mb-2">
+                          <h4 className="font-bold">Generator Backup</h4>
+                          <Badge className="bg-red-500">Down</Badge>
+                        </div>
+                        <div className="text-sm text-muted-foreground space-y-1 mb-3">
+                          <p>ID: A-205</p>
+                          <p>Health: 0%</p>
+                        </div>
+                        <Button size="sm" variant="destructive" className="w-full h-8">Report Issue</Button>
+                      </HoverCardContent>
+                    </HoverCard>
+                  </div>
+
+                  {/* Floating Action Bar */}
+                  <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-background/95 backdrop-blur shadow-xl border rounded-full px-4 py-2 flex gap-2 items-center">
+                    <Button variant="ghost" size="sm" className="rounded-full h-8">
+                      <MapPin className="size-4 mr-2" /> Place Asset
+                    </Button>
+                    <div className="w-px h-4 bg-border"></div>
+                    <Button variant="ghost" size="sm" className="rounded-full h-8">
+                      <Upload className="size-4 mr-2" /> Update Plan
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
