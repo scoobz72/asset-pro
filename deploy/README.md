@@ -4,7 +4,7 @@ Asset Pro runs on the same server as PermitHub (Ubuntu 24.04, Node, PostgreSQL 1
 Nginx, PM2, Certbot). It listens on **127.0.0.1:5100** (PermitHub uses 8080) and is
 reached through its own Nginx site. It uses no Replit services.
 
-Domain: **asset-pro.app** (bought through Replit, so its DNS is managed in Replit).
+Domain: **mycmms.co.uk** (registered at IONOS; DNS managed in IONOS).
 
 ## 1. Export the data from Replit (skip for a fresh start)
 
@@ -90,15 +90,15 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ## 7. DNS and HTTPS
 
-The domain was bought through Replit, so change its DNS in Replit: point the `@` and
-`www` **A records** at `217.154.61.211` and remove Replit's own records for it.
-When `ping asset-pro.app` shows the new IP:
+In IONOS DNS for mycmms.co.uk, point the `@` and `www` **A records** at
+`217.154.61.211` and remove any parking or AAAA records.
+When `ping mycmms.co.uk` shows the new IP:
 
 ```bash
-sudo certbot --nginx -d asset-pro.app -d www.asset-pro.app
+sudo certbot --nginx -d mycmms.co.uk -d www.mycmms.co.uk
 ```
 
-Sign in and check the data, then stop the Replit deployment.
+Sign in and check it works, then stop the Replit deployment.
 
 ## Going public
 
