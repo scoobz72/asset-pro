@@ -4,8 +4,7 @@ Asset Pro runs on the same server as PermitHub (Ubuntu 24.04, Node, PostgreSQL 1
 Nginx, PM2, Certbot). It listens on **127.0.0.1:5100** (PermitHub uses 8080) and is
 reached through its own Nginx site. It uses no Replit services.
 
-In step 2, set `DOMAIN` to the Asset Pro domain; later steps use it. Elsewhere,
-`YOUR_DOMAIN` means that domain.
+Domain: **asset-pro.app** (bought through Replit, so its DNS is managed in Replit).
 
 ## 1. Export the data from Replit
 
@@ -26,7 +25,6 @@ scp $HOME\Downloads\assetpro.sql jhapphubadmin@217.154.61.211:~
 
 ```bash
 ssh jhapphubadmin@217.154.61.211
-DOMAIN=YOUR_DOMAIN          # e.g. assetpro.co.uk (no https://, no www)
 cd ~
 git clone https://github.com/scoobz72/asset-pro.git assetpro
 cd assetpro
@@ -52,7 +50,7 @@ with demo data.
 ```bash
 cp deploy/env.example .env
 chmod 600 .env
-sed -i "s/YOUR_DB_PASSWORD/$DBPASS/; s/YOUR_DOMAIN/$DOMAIN/" .env
+sed -i "s/YOUR_DB_PASSWORD/$DBPASS/" .env
 sed -i "s/^SESSION_SECRET=.*/SESSION_SECRET=$(openssl rand -hex 32)/" .env
 nano .env     # check it
 ```
@@ -68,7 +66,6 @@ pm2 logs assetpro --lines 30
 ## 6. Nginx
 
 ```bash
-sed -i "s/YOUR_DOMAIN/$DOMAIN/g" deploy/nginx-assetpro.conf
 sudo cp deploy/nginx-assetpro.conf /etc/nginx/sites-available/assetpro
 sudo ln -sf /etc/nginx/sites-available/assetpro /etc/nginx/sites-enabled/assetpro
 sudo nginx -t && sudo systemctl reload nginx
@@ -78,10 +75,10 @@ sudo nginx -t && sudo systemctl reload nginx
 
 The domain was bought through Replit, so change its DNS in Replit: point the `@` and
 `www` **A records** at `217.154.61.211` and remove Replit's own records for it.
-When `ping $DOMAIN` shows the new IP:
+When `ping asset-pro.app` shows the new IP:
 
 ```bash
-sudo certbot --nginx -d $DOMAIN -d www.$DOMAIN
+sudo certbot --nginx -d asset-pro.app -d www.asset-pro.app
 ```
 
 Sign in and check the data, then stop the Replit deployment.
