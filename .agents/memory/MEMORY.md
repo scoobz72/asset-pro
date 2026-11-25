@@ -1,0 +1,1 @@
+- [Dependency remediation](dependency-remediation.md) — preserve a scoped tooling override until upstream removes its obsolete loader.

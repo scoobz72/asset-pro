@@ -131,7 +131,8 @@ export const maintenanceRequests = pgTable("maintenance_requests", {
   createdAt: text("created_at"),
 });
 
-export const insertUserSchema = createInsertSchema(users).omit({ id: true });
+// Generated identity columns are already excluded by drizzle-zod.
+export const insertUserSchema = createInsertSchema(users);
 export const insertSiteSchema = createInsertSchema(sites);
 export const insertLocationSchema = createInsertSchema(locations);
 export const insertAssetSchema = createInsertSchema(assets);
