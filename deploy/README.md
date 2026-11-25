@@ -6,7 +6,9 @@ reached through its own Nginx site. It uses no Replit services.
 
 Domain: **asset-pro.app** (bought through Replit, so its DNS is managed in Replit).
 
-## 1. Export the data from Replit
+## 1. Export the data from Replit (skip for a fresh start)
+
+Asset Pro has no live users, so this is optional. Skip it to start with the demo data.
 
 In the **Replit Shell** of the Asset Pro project:
 
@@ -39,11 +41,12 @@ git checkout move-off-replit
 DBPASS="$(openssl rand -hex 16)"; echo "DB password: $DBPASS"
 sudo -u postgres psql -c "CREATE USER assetpro WITH PASSWORD '$DBPASS';"
 sudo -u postgres psql -c "CREATE DATABASE assetpro OWNER assetpro;"
-psql "postgresql://assetpro:$DBPASS@localhost:5432/assetpro" -v ON_ERROR_STOP=1 -f ~/assetpro.sql
+# Only if you exported the Replit data in step 1:
+# psql "postgresql://assetpro:$DBPASS@localhost:5432/assetpro" -v ON_ERROR_STOP=1 -f ~/assetpro.sql
 ```
 
-Load the data **before** the first start: if the database is empty, the app fills it
-with demo data.
+If the database is empty on first start, the app fills it with demo data. The demo
+Manager is `john@promaintain.app`; it has no password until you set one in step 4.
 
 ## 4. Settings
 
@@ -54,6 +57,11 @@ sed -i "s/YOUR_DB_PASSWORD/$DBPASS/" .env
 sed -i "s/^SESSION_SECRET=.*/SESSION_SECRET=$(openssl rand -hex 32)/" .env
 nano .env     # check it
 ```
+
+Fresh start only: in `.env`, uncomment and set
+`ADMIN_EMAIL=john@promaintain.app` and `ADMIN_BOOTSTRAP_PASSWORD=` (8+ characters).
+After signing in, change that account to your own email and password in Team, then
+comment both lines out again and run `pm2 restart assetpro`.
 
 ## 5. Build and start
 
