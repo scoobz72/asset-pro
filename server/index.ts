@@ -77,7 +77,8 @@ app.use((req, res, next) => {
   httpServer.listen(
     {
       port,
-      host: "0.0.0.0",
+      // On the VPS set HOST=127.0.0.1 so only nginx can reach the app.
+      host: process.env.HOST || "0.0.0.0",
       reusePort: true,
     },
     () => {
