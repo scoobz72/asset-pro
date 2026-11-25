@@ -10,6 +10,12 @@ npm ci --include=dev --no-audit --no-fund
 # APP_URL is used at build time for the social-share image links
 APP_URL="$(grep -E '^APP_URL=' .env | cut -d= -f2-)" npm run build
 
+# Create/update the database tables to match shared/schema.ts.
+# If a change would delete data, drizzle asks first - read it before answering.
+DATABASE_URL="$(grep -E '^DATABASE_URL=' .env | cut -d= -f2-)" npx drizzle-kit push
+
 pm2 startOrReload deploy/ecosystem.config.cjs --update-env
 pm2 save
-echo "Deployed. Check: curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:5100/"
+sleep 5
+echo -n "Health check (expect 200): "
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:5100/ || true
