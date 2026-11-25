@@ -71,7 +71,16 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:5100/    # expect 200
 pm2 logs assetpro --lines 30
 ```
 
-## 6. Nginx
+## 6. Nginx (site is password-protected until launch)
+
+Create the site password (you'll be asked to type it twice):
+
+```bash
+printf "justin:%s\n" "$(openssl passwd -apr1)" | sudo tee /etc/nginx/assetpro.htpasswd >/dev/null
+sudo chown root:www-data /etc/nginx/assetpro.htpasswd && sudo chmod 640 /etc/nginx/assetpro.htpasswd
+```
+
+Then add the site:
 
 ```bash
 sudo cp deploy/nginx-assetpro.conf /etc/nginx/sites-available/assetpro
@@ -90,6 +99,11 @@ sudo certbot --nginx -d asset-pro.app -d www.asset-pro.app
 ```
 
 Sign in and check the data, then stop the Replit deployment.
+
+## Going public
+
+Delete the `auth_basic` and `auth_basic_user_file` lines from
+`/etc/nginx/sites-available/assetpro`, then `sudo nginx -t && sudo systemctl reload nginx`.
 
 ## Updates
 
