@@ -1,101 +1,124 @@
-import { eq, ilike, or, and, desc, asc } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "./db";
+import { hashPassword } from "./password";
 import {
   users, sites, locations, assets, assetParts, inventory,
   suppliers, jobs, templates, stockTransactions, purchaseOrders,
   assetAudits, maintenanceRequests,
-  type InsertUser, type User, type Site, type Location, type Asset,
+  type InsertUser, type User, type PublicUser,
+  type InsertSite, type InsertLocation, type InsertAsset, type InsertInventoryItem,
+  type InsertSupplier, type InsertJob, type InsertTemplate, type InsertStockTransaction,
+  type InsertPurchaseOrder, type InsertAssetAudit, type InsertMaintenanceRequest, type Site, type Location, type Asset,
   type InventoryItem, type Supplier, type Job, type Template,
   type StockTransaction, type PurchaseOrder, type AssetAudit, type MaintenanceRequest
 } from "@shared/schema";
 
 export interface IStorage {
-  getUsers(): Promise<User[]>;
-  getUser(id: number): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
-  updateUser(id: number, data: Partial<InsertUser>): Promise<User | undefined>;
+  getUsers(): Promise<PublicUser[]>;
+  getUser(id: number): Promise<PublicUser | undefined>;
+  /** Internal use only (authentication): includes the password hash. */
+  getUserCredentialsByEmail(email: string): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<PublicUser>;
+  updateUser(id: number, data: Partial<InsertUser>): Promise<PublicUser | undefined>;
 
   getSites(): Promise<Site[]>;
-  createSite(site: Site): Promise<Site>;
-  updateSite(id: string, data: Partial<Site>): Promise<Site | undefined>;
+  createSite(site: InsertSite): Promise<Site>;
+  updateSite(id: string, data: Partial<InsertSite>): Promise<Site | undefined>;
   deleteSite(id: string): Promise<void>;
 
   getLocations(): Promise<Location[]>;
-  createLocation(loc: Location): Promise<Location>;
-  updateLocation(id: string, data: Partial<Location>): Promise<Location | undefined>;
+  createLocation(loc: InsertLocation): Promise<Location>;
+  updateLocation(id: string, data: Partial<InsertLocation>): Promise<Location | undefined>;
   deleteLocation(id: string): Promise<void>;
 
   getAssets(): Promise<Asset[]>;
   getAsset(id: string): Promise<Asset | undefined>;
-  createAsset(asset: Asset): Promise<Asset>;
-  updateAsset(id: string, data: Partial<Asset>): Promise<Asset | undefined>;
+  createAsset(asset: InsertAsset): Promise<Asset>;
+  updateAsset(id: string, data: Partial<InsertAsset>): Promise<Asset | undefined>;
   deleteAsset(id: string): Promise<void>;
   getAssetParts(assetId: string): Promise<string[]>;
   setAssetParts(assetId: string, partIds: string[]): Promise<void>;
 
   getInventory(): Promise<InventoryItem[]>;
   getInventoryItem(id: string): Promise<InventoryItem | undefined>;
-  createInventoryItem(item: InventoryItem): Promise<InventoryItem>;
-  updateInventoryItem(id: string, data: Partial<InventoryItem>): Promise<InventoryItem | undefined>;
+  createInventoryItem(item: InsertInventoryItem): Promise<InventoryItem>;
+  updateInventoryItem(id: string, data: Partial<InsertInventoryItem>): Promise<InventoryItem | undefined>;
   deleteInventoryItem(id: string): Promise<void>;
 
   getSuppliers(): Promise<Supplier[]>;
-  createSupplier(supplier: Supplier): Promise<Supplier>;
-  updateSupplier(id: string, data: Partial<Supplier>): Promise<Supplier | undefined>;
+  createSupplier(supplier: InsertSupplier): Promise<Supplier>;
+  updateSupplier(id: string, data: Partial<InsertSupplier>): Promise<Supplier | undefined>;
   deleteSupplier(id: string): Promise<void>;
 
   getJobs(): Promise<Job[]>;
   getJob(id: string): Promise<Job | undefined>;
-  createJob(job: Job): Promise<Job>;
-  updateJob(id: string, data: Partial<Job>): Promise<Job | undefined>;
+  createJob(job: InsertJob): Promise<Job>;
+  updateJob(id: string, data: Partial<InsertJob>): Promise<Job | undefined>;
   deleteJob(id: string): Promise<void>;
 
   getTemplates(): Promise<Template[]>;
-  createTemplate(tpl: Template): Promise<Template>;
-  updateTemplate(id: string, data: Partial<Template>): Promise<Template | undefined>;
+  createTemplate(tpl: InsertTemplate): Promise<Template>;
+  updateTemplate(id: string, data: Partial<InsertTemplate>): Promise<Template | undefined>;
   deleteTemplate(id: string): Promise<void>;
 
   getStockTransactions(): Promise<StockTransaction[]>;
-  createStockTransaction(txn: StockTransaction): Promise<StockTransaction>;
+  createStockTransaction(txn: InsertStockTransaction): Promise<StockTransaction>;
 
   getPurchaseOrders(): Promise<PurchaseOrder[]>;
-  createPurchaseOrder(po: PurchaseOrder): Promise<PurchaseOrder>;
-  updatePurchaseOrder(id: string, data: Partial<PurchaseOrder>): Promise<PurchaseOrder | undefined>;
+  createPurchaseOrder(po: InsertPurchaseOrder): Promise<PurchaseOrder>;
+  updatePurchaseOrder(id: string, data: Partial<InsertPurchaseOrder>): Promise<PurchaseOrder | undefined>;
 
   getAssetAudits(): Promise<AssetAudit[]>;
-  createAssetAudit(audit: AssetAudit): Promise<AssetAudit>;
-  updateAssetAudit(id: string, data: Partial<AssetAudit>): Promise<AssetAudit | undefined>;
+  createAssetAudit(audit: InsertAssetAudit): Promise<AssetAudit>;
+  updateAssetAudit(id: string, data: Partial<InsertAssetAudit>): Promise<AssetAudit | undefined>;
 
   getMaintenanceRequests(): Promise<MaintenanceRequest[]>;
-  createMaintenanceRequest(req: MaintenanceRequest): Promise<MaintenanceRequest>;
-  updateMaintenanceRequest(id: string, data: Partial<MaintenanceRequest>): Promise<MaintenanceRequest | undefined>;
+  createMaintenanceRequest(req: InsertMaintenanceRequest): Promise<MaintenanceRequest>;
+  updateMaintenanceRequest(id: string, data: Partial<InsertMaintenanceRequest>): Promise<MaintenanceRequest | undefined>;
 }
 
+// Explicit projection so the password hash can never leak through a user query.
+const publicUserColumns = {
+  id: users.id,
+  name: users.name,
+  role: users.role,
+  status: users.status,
+  avatar: users.avatar,
+  email: users.email,
+};
+
 export class DatabaseStorage implements IStorage {
-  async getUsers(): Promise<User[]> {
-    return db.select().from(users);
+  async getUsers(): Promise<PublicUser[]> {
+    return db.select(publicUserColumns).from(users);
   }
-  async getUser(id: number): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
+  async getUser(id: number): Promise<PublicUser | undefined> {
+    const [user] = await db.select(publicUserColumns).from(users).where(eq(users.id, id));
     return user;
   }
-  async createUser(data: InsertUser): Promise<User> {
-    const [user] = await db.insert(users).values(data).returning();
+  async getUserCredentialsByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(sql`lower(${users.email})`, email.toLowerCase()));
     return user;
   }
-  async updateUser(id: number, data: Partial<InsertUser>): Promise<User | undefined> {
-    const [user] = await db.update(users).set(data).where(eq(users.id, id)).returning();
+  async createUser(data: InsertUser): Promise<PublicUser> {
+    const values = { ...data, password: data.password ? await hashPassword(data.password) : null };
+    const [user] = await db.insert(users).values(values).returning(publicUserColumns);
+    return user;
+  }
+  async updateUser(id: number, data: Partial<InsertUser>): Promise<PublicUser | undefined> {
+    const values = { ...data };
+    if (values.password) values.password = await hashPassword(values.password);
+    const [user] = await db.update(users).set(values).where(eq(users.id, id)).returning(publicUserColumns);
     return user;
   }
 
   async getSites(): Promise<Site[]> {
     return db.select().from(sites);
   }
-  async createSite(site: Site): Promise<Site> {
+  async createSite(site: InsertSite): Promise<Site> {
     const [s] = await db.insert(sites).values(site).returning();
     return s;
   }
-  async updateSite(id: string, data: Partial<Site>): Promise<Site | undefined> {
+  async updateSite(id: string, data: Partial<InsertSite>): Promise<Site | undefined> {
     const [s] = await db.update(sites).set(data).where(eq(sites.id, id)).returning();
     return s;
   }
@@ -106,11 +129,11 @@ export class DatabaseStorage implements IStorage {
   async getLocations(): Promise<Location[]> {
     return db.select().from(locations);
   }
-  async createLocation(loc: Location): Promise<Location> {
+  async createLocation(loc: InsertLocation): Promise<Location> {
     const [l] = await db.insert(locations).values(loc).returning();
     return l;
   }
-  async updateLocation(id: string, data: Partial<Location>): Promise<Location | undefined> {
+  async updateLocation(id: string, data: Partial<InsertLocation>): Promise<Location | undefined> {
     const [l] = await db.update(locations).set(data).where(eq(locations.id, id)).returning();
     return l;
   }
@@ -125,11 +148,11 @@ export class DatabaseStorage implements IStorage {
     const [a] = await db.select().from(assets).where(eq(assets.id, id));
     return a;
   }
-  async createAsset(asset: Asset): Promise<Asset> {
+  async createAsset(asset: InsertAsset): Promise<Asset> {
     const [a] = await db.insert(assets).values(asset).returning();
     return a;
   }
-  async updateAsset(id: string, data: Partial<Asset>): Promise<Asset | undefined> {
+  async updateAsset(id: string, data: Partial<InsertAsset>): Promise<Asset | undefined> {
     const [a] = await db.update(assets).set(data).where(eq(assets.id, id)).returning();
     return a;
   }
@@ -155,11 +178,11 @@ export class DatabaseStorage implements IStorage {
     const [item] = await db.select().from(inventory).where(eq(inventory.id, id));
     return item;
   }
-  async createInventoryItem(item: InventoryItem): Promise<InventoryItem> {
+  async createInventoryItem(item: InsertInventoryItem): Promise<InventoryItem> {
     const [i] = await db.insert(inventory).values(item).returning();
     return i;
   }
-  async updateInventoryItem(id: string, data: Partial<InventoryItem>): Promise<InventoryItem | undefined> {
+  async updateInventoryItem(id: string, data: Partial<InsertInventoryItem>): Promise<InventoryItem | undefined> {
     const [i] = await db.update(inventory).set(data).where(eq(inventory.id, id)).returning();
     return i;
   }
@@ -170,11 +193,11 @@ export class DatabaseStorage implements IStorage {
   async getSuppliers(): Promise<Supplier[]> {
     return db.select().from(suppliers);
   }
-  async createSupplier(supplier: Supplier): Promise<Supplier> {
+  async createSupplier(supplier: InsertSupplier): Promise<Supplier> {
     const [s] = await db.insert(suppliers).values(supplier).returning();
     return s;
   }
-  async updateSupplier(id: string, data: Partial<Supplier>): Promise<Supplier | undefined> {
+  async updateSupplier(id: string, data: Partial<InsertSupplier>): Promise<Supplier | undefined> {
     const [s] = await db.update(suppliers).set(data).where(eq(suppliers.id, id)).returning();
     return s;
   }
@@ -189,11 +212,11 @@ export class DatabaseStorage implements IStorage {
     const [j] = await db.select().from(jobs).where(eq(jobs.id, id));
     return j;
   }
-  async createJob(job: Job): Promise<Job> {
+  async createJob(job: InsertJob): Promise<Job> {
     const [j] = await db.insert(jobs).values(job).returning();
     return j;
   }
-  async updateJob(id: string, data: Partial<Job>): Promise<Job | undefined> {
+  async updateJob(id: string, data: Partial<InsertJob>): Promise<Job | undefined> {
     const [j] = await db.update(jobs).set(data).where(eq(jobs.id, id)).returning();
     return j;
   }
@@ -204,11 +227,11 @@ export class DatabaseStorage implements IStorage {
   async getTemplates(): Promise<Template[]> {
     return db.select().from(templates);
   }
-  async createTemplate(tpl: Template): Promise<Template> {
+  async createTemplate(tpl: InsertTemplate): Promise<Template> {
     const [t] = await db.insert(templates).values(tpl).returning();
     return t;
   }
-  async updateTemplate(id: string, data: Partial<Template>): Promise<Template | undefined> {
+  async updateTemplate(id: string, data: Partial<InsertTemplate>): Promise<Template | undefined> {
     const [t] = await db.update(templates).set(data).where(eq(templates.id, id)).returning();
     return t;
   }
@@ -219,7 +242,7 @@ export class DatabaseStorage implements IStorage {
   async getStockTransactions(): Promise<StockTransaction[]> {
     return db.select().from(stockTransactions);
   }
-  async createStockTransaction(txn: StockTransaction): Promise<StockTransaction> {
+  async createStockTransaction(txn: InsertStockTransaction): Promise<StockTransaction> {
     const [t] = await db.insert(stockTransactions).values(txn).returning();
     return t;
   }
@@ -227,11 +250,11 @@ export class DatabaseStorage implements IStorage {
   async getPurchaseOrders(): Promise<PurchaseOrder[]> {
     return db.select().from(purchaseOrders);
   }
-  async createPurchaseOrder(po: PurchaseOrder): Promise<PurchaseOrder> {
+  async createPurchaseOrder(po: InsertPurchaseOrder): Promise<PurchaseOrder> {
     const [p] = await db.insert(purchaseOrders).values(po).returning();
     return p;
   }
-  async updatePurchaseOrder(id: string, data: Partial<PurchaseOrder>): Promise<PurchaseOrder | undefined> {
+  async updatePurchaseOrder(id: string, data: Partial<InsertPurchaseOrder>): Promise<PurchaseOrder | undefined> {
     const [p] = await db.update(purchaseOrders).set(data).where(eq(purchaseOrders.id, id)).returning();
     return p;
   }
@@ -239,11 +262,11 @@ export class DatabaseStorage implements IStorage {
   async getAssetAudits(): Promise<AssetAudit[]> {
     return db.select().from(assetAudits);
   }
-  async createAssetAudit(audit: AssetAudit): Promise<AssetAudit> {
+  async createAssetAudit(audit: InsertAssetAudit): Promise<AssetAudit> {
     const [a] = await db.insert(assetAudits).values(audit).returning();
     return a;
   }
-  async updateAssetAudit(id: string, data: Partial<AssetAudit>): Promise<AssetAudit | undefined> {
+  async updateAssetAudit(id: string, data: Partial<InsertAssetAudit>): Promise<AssetAudit | undefined> {
     const [a] = await db.update(assetAudits).set(data).where(eq(assetAudits.id, id)).returning();
     return a;
   }
@@ -251,11 +274,11 @@ export class DatabaseStorage implements IStorage {
   async getMaintenanceRequests(): Promise<MaintenanceRequest[]> {
     return db.select().from(maintenanceRequests);
   }
-  async createMaintenanceRequest(req: MaintenanceRequest): Promise<MaintenanceRequest> {
+  async createMaintenanceRequest(req: InsertMaintenanceRequest): Promise<MaintenanceRequest> {
     const [r] = await db.insert(maintenanceRequests).values(req).returning();
     return r;
   }
-  async updateMaintenanceRequest(id: string, data: Partial<MaintenanceRequest>): Promise<MaintenanceRequest | undefined> {
+  async updateMaintenanceRequest(id: string, data: Partial<InsertMaintenanceRequest>): Promise<MaintenanceRequest | undefined> {
     const [r] = await db.update(maintenanceRequests).set(data).where(eq(maintenanceRequests.id, id)).returning();
     return r;
   }

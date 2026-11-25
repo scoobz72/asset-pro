@@ -3,7 +3,8 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useCurrentUser } from "@/hooks/use-auth";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import Jobs from "@/pages/jobs";
@@ -53,27 +54,26 @@ function Router({ defaultLandingPage, setDefaultLandingPage }: any) {
   );
 }
 
-function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+function AppContent() {
+  const { data: currentUser, isLoading: authLoading } = useCurrentUser();
+  const isAuthenticated = !!currentUser;
   const [currentCompany, setCurrentCompany] = useState<string | null>(null);
   const [defaultLandingPage, setDefaultLandingPage] = useState("/");
   const [location, setLocation] = useLocation();
 
-  useEffect(() => {
-    fetch("/api/seed", { method: "POST" }).catch(() => {});
-  }, []);
-
   const handleLogin = (companyName?: string) => {
-    setIsAuthenticated(true);
     if (companyName) setCurrentCompany(companyName);
     setLocation(defaultLandingPage);
   };
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
+    <TooltipProvider>
         <Toaster />
-        {!isAuthenticated ? (
+        {authLoading ? (
+          <div className="min-h-screen flex items-center justify-center text-muted-foreground">
+            Loading...
+          </div>
+        ) : !isAuthenticated ? (
           <Switch>
             <Route path="/login">
               <Auth onLogin={handleLogin} defaultTab="login" />
@@ -110,7 +110,14 @@ function App() {
             />
           </>
         )}
-      </TooltipProvider>
+    </TooltipProvider>
+  );
+}
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AppContent />
     </QueryClientProvider>
   );
 }

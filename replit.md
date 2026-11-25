@@ -50,7 +50,18 @@ All prefixed with `/api/`:
 - CRUD: users, sites, locations, assets, inventory, suppliers, jobs, templates, purchase-orders, audits, maintenance-requests
 - GET /api/assets/:id/parts - Asset parts relationship
 - GET/POST /api/transactions - Stock transaction log
-- POST /api/seed - Seeds initial demo data
+- POST /api/auth/login, POST /api/auth/logout, GET /api/auth/me - Session authentication
+
+Demo data is seeded on server startup when the database is empty (there is no seed endpoint).
+
+## Authentication & Authorization
+
+- Server-side sessions (express-session + Postgres `user_sessions` table) with passport-local email/password login. `SESSION_SECRET` is required.
+- Every `/api/*` route except the auth routes requires a signed-in user.
+- Manager/Admin only: creating/updating users, all DELETE endpoints, approving/rejecting purchase orders.
+- Passwords are hashed with scrypt; user API responses never include the password column, and request logs never include response bodies.
+- All create/update bodies are validated and allow-listed with the Zod schemas in `shared/schema.ts`.
+- First sign-in: set the `ADMIN_BOOTSTRAP_PASSWORD` secret (optionally `ADMIN_EMAIL`). On startup, if no Manager/Admin has a password yet, it is assigned to that account (default: the first Manager, `john@promaintain.app` in the demo data). Other users get passwords via `PATCH /api/users/:id` by a Manager.
 
 ## Key Features
 

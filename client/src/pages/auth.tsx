@@ -7,30 +7,39 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLocation } from "wouter";
+import { useLogin } from "@/hooks/use-auth";
 
 export default function Auth({ onLogin, defaultTab = "login" }: { onLogin: (companyName?: string) => void, defaultTab?: string }) {
-  const [isLoading, setIsLoading] = useState(false);
   const [companyName, setCompanyName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [registerError, setRegisterError] = useState<string | null>(null);
   const [, setLocation] = useLocation();
+  const login = useLogin();
+  const isLoading = login.isPending;
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
-      onLogin("Demo Company");
-    }, 1000);
+    setLoginError(null);
+    login.mutate(
+      { email, password },
+      {
+        onSuccess: () => onLogin(),
+        onError: (err: Error) => {
+          setLoginError(err.message.startsWith("401") ? "Invalid email or password." : "Sign in failed. Please try again.");
+        },
+      },
+    );
+  };
+
+  const handleSsoLogin = () => {
+    setLoginError("Single sign-on is not configured for this workspace. Sign in with your email and password.");
   };
 
   const handleRegister = (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-    // Simulate API call and tenant provisioning
-    setTimeout(() => {
-      setIsLoading(false);
-      onLogin(companyName);
-    }, 1500);
+    setRegisterError("Self-service workspace registration is not available. Ask your administrator to create an account for you.");
   };
 
   const subdomain = companyName 
@@ -84,7 +93,9 @@ export default function Auth({ onLogin, defaultTab = "login" }: { onLogin: (comp
                         placeholder="name@company.com" 
                         className="pl-9"
                         required
-                        defaultValue="demo@promaintain.app"
+                        autoComplete="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
                       />
                     </div>
                   </div>
@@ -102,14 +113,20 @@ export default function Auth({ onLogin, defaultTab = "login" }: { onLogin: (comp
                         type="password" 
                         className="pl-9"
                         required
-                        defaultValue="password"
+                        autoComplete="current-password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
                         placeholder="••••••••"
                       />
                     </div>
                   </div>
                   
-                  <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading ? "Verifying..." : "Sign In to Demo"}
+                  {loginError && (
+                    <p className="text-sm text-destructive" role="alert" data-testid="text-login-error">{loginError}</p>
+                  )}
+
+                  <Button type="submit" className="w-full" disabled={isLoading} data-testid="button-sign-in">
+                    {isLoading ? "Verifying..." : "Sign In"}
                   </Button>
                 </form>
 
@@ -120,7 +137,7 @@ export default function Auth({ onLogin, defaultTab = "login" }: { onLogin: (comp
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
-                  <Button variant="outline" type="button" onClick={handleLogin} className="bg-background">
+                  <Button variant="outline" type="button" onClick={handleSsoLogin} className="bg-background">
                     <svg className="mr-2 size-4" viewBox="0 0 24 24">
                       <path
                         d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -142,7 +159,7 @@ export default function Auth({ onLogin, defaultTab = "login" }: { onLogin: (comp
                     </svg>
                     Google
                   </Button>
-                  <Button variant="outline" type="button" onClick={handleLogin} className="bg-background">
+                  <Button variant="outline" type="button" onClick={handleSsoLogin} className="bg-background">
                     <svg className="mr-2 size-4" viewBox="0 0 21 21">
                       <path d="M0 0h10v10H0z" fill="#f25022"/>
                       <path d="M11 0h10v10H11z" fill="#7fba00"/>
@@ -228,8 +245,12 @@ export default function Auth({ onLogin, defaultTab = "login" }: { onLogin: (comp
                     </div>
                   </div>
                   
-                  <Button type="submit" className="w-full mt-2" disabled={isLoading}>
-                    {isLoading ? "Provisioning Tenant..." : "Create Workspace"}
+                  {registerError && (
+                    <p className="text-sm text-destructive" role="alert">{registerError}</p>
+                  )}
+
+                  <Button type="submit" className="w-full mt-2">
+                    Create Workspace
                   </Button>
                 </form>
               </CardContent>

@@ -34,6 +34,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState } from "react";
+import { useCurrentUser, useLogout } from "@/hooks/use-auth";
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -54,6 +55,9 @@ const navigation = [
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
+  const { data: currentUser } = useCurrentUser();
+  const logout = useLogout();
+  const initials = (currentUser?.name || "").split(" ").map((n) => n[0]).join("").slice(0, 2);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   return (
@@ -155,12 +159,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="pl-0 gap-2 hover:bg-transparent">
                   <Avatar className="size-8 border">
-                    <AvatarImage src="https://github.com/shadcn.png" />
-                    <AvatarFallback>JD</AvatarFallback>
+                    <AvatarImage src={currentUser?.avatar ?? undefined} />
+                    <AvatarFallback>{initials}</AvatarFallback>
                   </Avatar>
                   <div className="hidden md:flex flex-col items-start text-xs">
-                    <span className="font-semibold">John Doe</span>
-                    <span className="text-muted-foreground">Maintenance Mgr</span>
+                    <span className="font-semibold">{currentUser?.name}</span>
+                    <span className="text-muted-foreground">{currentUser?.role}</span>
                   </div>
                   <ChevronDown className="size-3 text-muted-foreground opacity-50" />
                 </Button>
@@ -171,7 +175,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 <DropdownMenuItem onClick={() => setLocation("/settings")}>Profile</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setLocation("/settings")}>Settings</DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-destructive" onClick={() => window.location.reload()}>Logout</DropdownMenuItem>
+                <DropdownMenuItem className="text-destructive" onClick={() => logout.mutate(undefined, { onSettled: () => setLocation("/") })}>Logout</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

@@ -1,1 +1,2 @@
 - [Dependency remediation](dependency-remediation.md) — preserve a scoped tooling override until upstream removes its obsolete loader.
+- [Auth model](auth-model.md) — why sign-in has no signup flow and the first admin comes from a bootstrap secret.

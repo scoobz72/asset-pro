@@ -132,21 +132,72 @@ export const maintenanceRequests = pgTable("maintenance_requests", {
 });
 
 // Generated identity columns are already excluded by drizzle-zod.
-export const insertUserSchema = createInsertSchema(users);
+// Object schemas strip unknown keys, so only declared columns ever reach the database.
+const numericInput = z.union([z.string(), z.number()]).transform((v) => String(v));
+
+export const PRIVILEGED_ROLES = ["Manager", "Admin"] as const;
+export const USER_ROLES = ["Manager", "Admin", "Lead", "Technician"] as const;
+
+export const insertUserSchema = createInsertSchema(users, {
+  name: (s) => s.trim().min(1).max(200),
+  role: () => z.enum(USER_ROLES).optional(),
+  email: () => z.string().trim().toLowerCase().email().max(320).nullable().optional(),
+  password: () => z.string().min(8).max(200).nullable().optional(),
+});
 export const insertSiteSchema = createInsertSchema(sites);
 export const insertLocationSchema = createInsertSchema(locations);
-export const insertAssetSchema = createInsertSchema(assets);
+export const insertAssetSchema = createInsertSchema(assets, {
+  health: (s) => s.int().min(0).max(100),
+});
 export const insertInventorySchema = createInsertSchema(inventory);
-export const insertSupplierSchema = createInsertSchema(suppliers);
+export const insertSupplierSchema = createInsertSchema(suppliers, {
+  rating: () => numericInput.nullable().optional(),
+});
 export const insertJobSchema = createInsertSchema(jobs);
 export const insertTemplateSchema = createInsertSchema(templates);
 export const insertStockTransactionSchema = createInsertSchema(stockTransactions);
-export const insertPurchaseOrderSchema = createInsertSchema(purchaseOrders);
+export const insertPurchaseOrderSchema = createInsertSchema(purchaseOrders, {
+  total: () => numericInput.optional(),
+});
 export const insertAssetAuditSchema = createInsertSchema(assetAudits);
 export const insertMaintenanceRequestSchema = createInsertSchema(maintenanceRequests);
 
+// Update schemas: every column optional, primary keys can never be changed.
+export const updateUserSchema = insertUserSchema.partial();
+export const updateSiteSchema = insertSiteSchema.omit({ id: true }).partial();
+export const updateLocationSchema = insertLocationSchema.omit({ id: true }).partial();
+export const updateAssetSchema = insertAssetSchema.omit({ id: true }).partial();
+export const updateInventorySchema = insertInventorySchema.omit({ id: true }).partial();
+export const updateSupplierSchema = insertSupplierSchema.omit({ id: true }).partial();
+export const updateJobSchema = insertJobSchema.omit({ id: true }).partial();
+export const updateTemplateSchema = insertTemplateSchema.omit({ id: true }).partial();
+export const updatePurchaseOrderSchema = insertPurchaseOrderSchema.omit({ id: true }).partial();
+export const updateAssetAuditSchema = insertAssetAuditSchema.omit({ id: true }).partial();
+export const updateMaintenanceRequestSchema = insertMaintenanceRequestSchema.omit({ id: true }).partial();
+
+export const assetPartsInputSchema = z.array(z.string().min(1)).max(500);
+
+export const loginSchema = z.object({
+  email: z.string().trim().toLowerCase().email().max(320),
+  password: z.string().min(1).max(200),
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
+export type InsertSite = z.infer<typeof insertSiteSchema>;
+export type InsertLocation = z.infer<typeof insertLocationSchema>;
+export type InsertAsset = z.infer<typeof insertAssetSchema>;
+export type InsertInventoryItem = z.infer<typeof insertInventorySchema>;
+export type InsertSupplier = z.infer<typeof insertSupplierSchema>;
+export type InsertJob = z.infer<typeof insertJobSchema>;
+export type InsertTemplate = z.infer<typeof insertTemplateSchema>;
+export type InsertStockTransaction = z.infer<typeof insertStockTransactionSchema>;
+export type InsertPurchaseOrder = z.infer<typeof insertPurchaseOrderSchema>;
+export type InsertAssetAudit = z.infer<typeof insertAssetAuditSchema>;
+export type InsertMaintenanceRequest = z.infer<typeof insertMaintenanceRequestSchema>;
+
 export type User = typeof users.$inferSelect;
+/** A user record that is safe to send to clients (never includes the password hash). */
+export type PublicUser = Omit<User, "password">;
 export type Site = typeof sites.$inferSelect;
 export type Location = typeof locations.$inferSelect;
 export type Asset = typeof assets.$inferSelect;
