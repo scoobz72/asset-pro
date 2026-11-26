@@ -1,5 +1,6 @@
 import { and, eq, sql, count, desc } from "drizzle-orm";
 import { db } from "./db";
+import { recordMovement, type Actor } from "./stock/ledger";
 import { hashPassword } from "./password";
 import {
   companies, accessRequests,
@@ -74,7 +75,7 @@ export interface IStorage {
 
   getInventory(companyId: number): Promise<InventoryItem[]>;
   getInventoryItem(companyId: number, id: string): Promise<InventoryItem | undefined>;
-  createInventoryItem(companyId: number, item: InsertInventoryItem): Promise<InventoryItem>;
+  createInventoryItem(companyId: number, item: InsertInventoryItem, actor?: Actor): Promise<InventoryItem>;
   updateInventoryItem(companyId: number, id: string, data: Partial<InsertInventoryItem>): Promise<InventoryItem | undefined>;
   deleteInventoryItem(companyId: number, id: string): Promise<void>;
 
@@ -97,7 +98,6 @@ export interface IStorage {
   getDashboardSummary(companyId: number): Promise<DashboardSummary>;
 
   getStockTransactions(companyId: number): Promise<StockTransaction[]>;
-  createStockTransaction(companyId: number, txn: InsertStockTransaction): Promise<StockTransaction>;
 
   getPurchaseOrders(companyId: number): Promise<PurchaseOrder[]>;
   createPurchaseOrder(companyId: number, po: InsertPurchaseOrder): Promise<PurchaseOrder>;
@@ -268,9 +268,18 @@ export class DatabaseStorage implements IStorage {
     const [item] = await db.select().from(inventory).where(and(eq(inventory.companyId, companyId), eq(inventory.id, id)));
     return item;
   }
-  async createInventoryItem(companyId: number, item: InsertInventoryItem): Promise<InventoryItem> {
-    const [i] = await db.insert(inventory).values({ ...item, companyId }).returning();
-    return i;
+  async createInventoryItem(companyId: number, item: InsertInventoryItem, actor: Actor = { name: "System" }): Promise<InventoryItem> {
+    // Opening stock goes through the ledger, so the part gets its first FIFO lot.
+    return db.transaction(async (tx) => {
+      const { stock, lastUsed: _u, lastStockTaken: _t, lastReplenished: _r, ...rest } = item;
+      const [created] = await tx.insert(inventory).values({ ...rest, stock: 0, companyId }).returning();
+      if (stock && stock > 0) {
+        await recordMovement(tx, companyId, { partId: created.id, type: "Stock In", quantity: stock, reference: "Opening stock" }, actor);
+        const [withStock] = await tx.select().from(inventory).where(and(eq(inventory.companyId, companyId), eq(inventory.id, created.id)));
+        return withStock;
+      }
+      return created;
+    });
   }
   async updateInventoryItem(companyId: number, id: string, data: Partial<InsertInventoryItem>): Promise<InventoryItem | undefined> {
     const [i] = await db.update(inventory).set(data).where(and(eq(inventory.companyId, companyId), eq(inventory.id, id))).returning();
@@ -424,11 +433,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getStockTransactions(companyId: number): Promise<StockTransaction[]> {
-    return db.select().from(stockTransactions).where(eq(stockTransactions.companyId, companyId));
-  }
-  async createStockTransaction(companyId: number, txn: InsertStockTransaction): Promise<StockTransaction> {
-    const [t] = await db.insert(stockTransactions).values({ ...txn, companyId }).returning();
-    return t;
+    return db.select().from(stockTransactions).where(eq(stockTransactions.companyId, companyId))
+      .orderBy(desc(stockTransactions.createdAt), desc(stockTransactions.id));
   }
 
   async getPurchaseOrders(companyId: number): Promise<PurchaseOrder[]> {

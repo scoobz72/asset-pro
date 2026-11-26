@@ -3,6 +3,7 @@ import { type Server } from "http";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
 import { storage } from "./storage";
+import { recordMovementNow, recordStockTake, StockError } from "./stock/ledger";
 import { previewImport, commitImport, ImportInvalidError } from "./import/commit";
 import { ImportFileError } from "./import/parse";
 import { buildWorkbook, XLSX_MIME } from "./import/template";
@@ -20,7 +21,7 @@ import {
   insertSupplierSchema, updateSupplierSchema,
   insertJobSchema, updateJobSchema,
   insertTemplateSchema, updateTemplateSchema,
-  insertStockTransactionSchema,
+  stockMovementSchema, stockTakeSchema,
   insertPurchaseOrderSchema, updatePurchaseOrderSchema,
   insertAssetAuditSchema, updateAssetAuditSchema,
   insertMaintenanceRequestSchema, updateMaintenanceRequestSchema,
@@ -302,7 +303,7 @@ export async function registerRoutes(
   app.post("/api/inventory", async (req, res) => {
     const data = parseBody(insertInventorySchema, req, res);
     if (!data) return;
-    const item = await storage.createInventoryItem(companyOf(req), data);
+    const item = await storage.createInventoryItem(companyOf(req), data, { name: req.user!.name });
     res.status(201).json(item);
   });
   app.patch("/api/inventory/:id", async (req, res) => {
@@ -396,11 +397,27 @@ export async function registerRoutes(
     const data = await storage.getStockTransactions(companyOf(req));
     res.json(data);
   });
-  app.post("/api/transactions", async (req, res) => {
-    const data = parseBody(insertStockTransactionSchema, req, res);
+  // Every stock change goes through the ledger (server/stock/ledger.ts): it locks the part,
+  // keeps FIFO lots in step and records the cost. Stock can't be edited directly.
+  app.post("/api/stock/movements", async (req, res) => {
+    const data = parseBody(stockMovementSchema, req, res);
     if (!data) return;
-    const txn = await storage.createStockTransaction(companyOf(req), data);
-    res.status(201).json(txn);
+    try {
+      res.status(201).json(await recordMovementNow(companyOf(req), data, { name: req.user!.name }));
+    } catch (err) {
+      if (err instanceof StockError) return res.status(err.status).json({ message: err.message });
+      throw err;
+    }
+  });
+  app.post("/api/stock/stock-take", async (req, res) => {
+    const data = parseBody(stockTakeSchema, req, res);
+    if (!data) return;
+    try {
+      res.json(await recordStockTake(companyOf(req), data.counts, { name: req.user!.name }, data.reference));
+    } catch (err) {
+      if (err instanceof StockError) return res.status(err.status).json({ message: err.message });
+      throw err;
+    }
   });
 
   // ===== PURCHASE ORDERS =====

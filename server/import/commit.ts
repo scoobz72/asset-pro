@@ -6,8 +6,9 @@ import { and, eq, ne, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
   sites, locations, storeRooms, bins, suppliers, inventory, assets, assetParts,
-  users, stockTransactions,
+  users,
 } from "@shared/schema";
+import { setStockTo } from "../stock/ledger";
 import { parseWorkbook } from "./parse";
 import { buildPlan, RECORD_TABS, type Existing, type ImportPlan, type Importer, type RecordTab, type TabSummary } from "./plan";
 import type { ImportIssue } from "./parse";
@@ -114,13 +115,16 @@ async function applyPlan(tx: Tx, plan: ImportPlan, companyId: number, importer: 
     const table = TABLES[t] as any;
     const ops = plan.records[t];
     const inserts = ops.filter((o) => o.action === "insert").map((o) => {
-      const { parentAssetId: _deferred, ...values } = o.values;
-      return { ...(t === "assets" ? values : o.values), companyId };
+      // Asset parents are set in a second pass; part stock goes through the ledger below.
+      const { parentAssetId: _deferred, stock: _stock, ...values } = o.values;
+      if (t === "assets") return { ...values, companyId };
+      if (t === "parts") return { ...values, stock: 0, companyId };
+      return { ...o.values, companyId };
     });
     await insertBatched(tx, table, inserts);
     for (const op of ops.filter((o) => o.action === "update")) {
       // Asset parents are set in the second pass below.
-      const { id: _id, parentAssetId: _deferred, ...set } = op.changed;
+      const { id: _id, parentAssetId: _deferred, stock: _stock, ...set } = op.changed;
       if (Object.keys(set).length === 0) continue;
       await tx.update(table).set(set).where(and(eq(table.companyId, companyId), eq(table.id, op.id)));
     }
@@ -150,18 +154,12 @@ async function applyPlan(tx: Tx, plan: ImportPlan, companyId: number, importer: 
       .where(and(eq(users.companyId, companyId), eq(users.id, u.userId!)));
   }
 
-  // Every stock change is logged, so the transactions page stays the full history.
-  const stamp = Date.now();
-  const now = new Date().toISOString();
-  await insertBatched(tx, stockTransactions, plan.stockChanges.map((c, i) => ({
-    companyId,
-    id: `TXN-IMP-${stamp}-${i + 1}`,
-    date: now,
-    partId: c.partId,
-    partName: c.partName,
-    type: "Import Adjustment",
-    quantity: c.quantity,
-    userId: importer.name,
-    reference: "Excel import",
-  })));
+  // Stock levels go through the ledger, so each change creates or uses FIFO lots and is
+  // logged with its cost: opening stock for new parts, an adjustment for existing ones.
+  for (const op of plan.records.parts) {
+    const target = op.action === "insert" ? op.values.stock : op.changed.stock;
+    if (typeof target !== "number") continue;
+    await setStockTo(tx, companyId, op.id, target, op.action === "insert" ? "Stock In" : "Import Adjustment",
+      { name: importer.name }, "Excel import");
+  }
 }

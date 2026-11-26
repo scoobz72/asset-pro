@@ -136,57 +136,35 @@ export default function StockTake() {
     setReasons(prev => ({ ...prev, [id]: reason }));
   };
 
+  // One request: the server records every count and adjusts any difference through the ledger.
   const submitStockTake = async () => {
+    const counts = filteredInventory
+      .filter((item: any) => countedItems[item.id] !== undefined)
+      .map((item: any) => ({ partId: item.id, counted: countedItems[item.id], reason: reasons[item.id] || undefined }));
+    if (counts.length === 0) {
+      toast({ title: "Nothing counted", description: "Enter at least one count first.", variant: "destructive" });
+      return;
+    }
     setIsSubmitting(true);
     try {
-      const promises: Promise<any>[] = [];
-
-      for (const item of filteredInventory) {
-        const count = countedItems[item.id];
-        if (count === undefined) continue;
-        const variance = count - item.stock;
-        if (variance !== 0) {
-          promises.push(
-            apiRequest("POST", "/api/transactions", {
-              date: new Date().toISOString(),
-              partId: item.id,
-              partName: item.name,
-              type: reasons[item.id] || (variance > 0 ? "Stock In" : "Stock Out - Missing"),
-              quantity: variance,
-              userId: "System",
-              reference: "Cycle Check",
-            })
-          );
-          promises.push(
-            apiRequest("PATCH", `/api/inventory/${item.id}`, {
-              stock: count,
-            })
-          );
-        }
+      const res = await apiRequest("POST", "/api/stock/stock-take", { counts, reference: "Stock take" });
+      const result: { counted: number; adjusted: number; valueChange: number } = await res.json();
+      for (const key of ["/api/transactions", "/api/inventory", "/api/dashboard/summary"]) {
+        queryClient.invalidateQueries({ queryKey: [key] });
       }
-
-      await Promise.all(promises);
-
-      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/inventory"] });
-
+      const value = result.valueChange === 0 ? "" : ` (${result.valueChange > 0 ? "+" : "−"}£${Math.abs(result.valueChange).toFixed(2)})`;
       toast({
-        title: "Cycle Check Completed",
-        description: `Successfully updated stock counts. Date stamps and reasons have been logged.`,
+        title: "Stock take saved",
+        description: `${result.counted} part${result.counted === 1 ? "" : "s"} counted, ${result.adjusted} adjusted${value}.`,
       });
-
       setTimeout(() => {
         setStep(1);
         setSelectedLocations([]);
         setCountedItems({});
         setReasons({});
       }, 1500);
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to submit stock take. Please try again.",
-        variant: "destructive",
-      });
+    } catch (error: any) {
+      toast({ title: "Stock take not saved", description: error?.message ?? "Please try again.", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }

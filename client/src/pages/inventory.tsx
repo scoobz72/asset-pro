@@ -1,6 +1,6 @@
 import Layout from "@/components/Layout";
-import { useInventory, useSuppliers, useAssets, useTransactions, useBins, useStoreRooms, useCreateMutation, useUpdateMutation, useDeleteMutation } from "@/hooks/use-data";
-import { PART_UNITS } from "@shared/constants";
+import { useInventory, useSuppliers, useAssets, useTransactions, useBins, useStoreRooms, useJobs, useCreateMutation, useUpdateMutation, useDeleteMutation } from "@/hooks/use-data";
+import { PART_UNITS, STOCK_IN_TYPES, STOCK_OUT_TYPES } from "@shared/constants";
 import { 
   Table, 
   TableBody, 
@@ -122,42 +122,41 @@ export default function Inventory() {
 
   const [stockAdjustment, setStockAdjustment] = useState({
     quantity: 0,
-    type: "Stock In",
+    type: "Stock In" as string,
     reference: "",
+    unitCost: "",
+    jobId: "",
   });
+  const { data: jobsData = [] } = useJobs();
 
   const createMutation = useCreateMutation("/api/inventory", ["/api/inventory"]);
   const updateMutation = useUpdateMutation("/api/inventory", ["/api/inventory"]);
   const deleteMutation = useDeleteMutation("/api/inventory", ["/api/inventory"]);
 
+  // Stock changes go through the server ledger, which works out cost and balance.
   const adjustStockMutation = useMutation({
     mutationFn: async ({ item, adjustment }: { item: InventoryItem; adjustment: typeof stockAdjustment }) => {
-      const qty = adjustment.type.includes("Out") || adjustment.type.includes("Book Out") ? -Math.abs(adjustment.quantity) : Math.abs(adjustment.quantity);
-      const newStock = item.stock + qty;
-
-      await apiRequest("PATCH", `/api/inventory/${item.id}`, { stock: newStock });
-
-      const txnId = `TXN-${Date.now()}`;
-      await apiRequest("POST", "/api/transactions", {
-        id: txnId,
-        date: new Date().toISOString(),
+      const isIn = (STOCK_IN_TYPES as readonly string[]).includes(adjustment.type);
+      const cost = adjustment.unitCost.replace(/[£,\s]/g, "");
+      await apiRequest("POST", "/api/stock/movements", {
         partId: item.id,
-        partName: item.name,
         type: adjustment.type,
-        quantity: qty,
-        userId: "Current User",
-        reference: adjustment.reference || "Manual Adjustment",
+        quantity: Math.abs(adjustment.quantity),
+        unitCost: isIn && cost !== "" ? Number(cost) : undefined,
+        jobId: adjustment.jobId || undefined,
+        reference: adjustment.reference.trim() || undefined,
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/inventory"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      for (const key of ["/api/inventory", "/api/transactions", "/api/dashboard/summary"]) {
+        queryClient.invalidateQueries({ queryKey: [key] });
+      }
       setAdjustStockDialogOpen(false);
       setSelectedItem(null);
-      toast({ title: "Stock adjusted successfully" });
+      toast({ title: "Stock updated" });
     },
     onError: (err: Error) => {
-      toast({ title: "Error adjusting stock", description: err.message, variant: "destructive" });
+      toast({ title: "Couldn't update stock", description: err.message, variant: "destructive" });
     },
   });
 
@@ -246,7 +245,7 @@ export default function Inventory() {
 
   const openAdjustStockDialog = (item: InventoryItem) => {
     setSelectedItem(item);
-    setStockAdjustment({ quantity: 0, type: "Stock In", reference: "" });
+    setStockAdjustment({ quantity: 0, type: "Stock In", reference: "", unitCost: "", jobId: "" });
     setAdjustStockDialogOpen(true);
   };
 
@@ -697,46 +696,88 @@ export default function Inventory() {
       </Dialog>
 
       <Dialog open={adjustStockDialogOpen} onOpenChange={setAdjustStockDialogOpen}>
-        <DialogContent className="sm:max-w-[400px]">
+        <DialogContent className="sm:max-w-[420px]">
           <DialogHeader>
-            <DialogTitle>Adjust Stock: {selectedItem?.name}</DialogTitle>
+            <DialogTitle>Stock Movement: {selectedItem?.name}</DialogTitle>
             <DialogDescription>
-              Current stock: {selectedItem?.stock} {selectedItem?.unit}
+              In stock: {selectedItem?.stock} {selectedItem?.unit}
+              {selectedItem?.unitCost ? ` · unit cost £${Number(selectedItem.unitCost).toFixed(2)}` : ""}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="space-y-2">
-              <Label>Adjustment Type</Label>
-              <Select value={stockAdjustment.type} onValueChange={v => setStockAdjustment({...stockAdjustment, type: v})}>
-                <SelectTrigger data-testid="select-adjust-type"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Stock In">Stock In</SelectItem>
-                  <SelectItem value="Stock Out - Damaged">Stock Out - Damaged</SelectItem>
-                  <SelectItem value="Stock Out - Missing">Stock Out - Missing</SelectItem>
-                  <SelectItem value="Job Book Out">Job Book Out</SelectItem>
-                  <SelectItem value="Transfer In">Transfer In</SelectItem>
-                  <SelectItem value="Purchase Order">Purchase Order</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Quantity</Label>
-              <Input data-testid="input-adjust-quantity" type="number" min="0" value={stockAdjustment.quantity} onChange={e => setStockAdjustment({...stockAdjustment, quantity: parseInt(e.target.value) || 0})} />
-            </div>
-            <div className="space-y-2">
-              <Label>Reference</Label>
-              <Input data-testid="input-adjust-reference" value={stockAdjustment.reference} onChange={e => setStockAdjustment({...stockAdjustment, reference: e.target.value})} placeholder="JOB-XXXX or note" />
-            </div>
-          </div>
+          {(() => {
+            const isIn = (STOCK_IN_TYPES as readonly string[]).includes(stockAdjustment.type);
+            const forJob = stockAdjustment.type === "Job Issue" || stockAdjustment.type === "Return to Stores";
+            const after = selectedItem ? selectedItem.stock + (isIn ? 1 : -1) * Math.abs(stockAdjustment.quantity) : 0;
+            return (
+              <div className="grid gap-4 py-4">
+                <div className="space-y-2">
+                  <Label>Movement</Label>
+                  <Select value={stockAdjustment.type} onValueChange={v => setStockAdjustment({ ...stockAdjustment, type: v, jobId: "" })}>
+                    <SelectTrigger data-testid="select-adjust-type"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectLabel>Stock in</SelectLabel>
+                        {STOCK_IN_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                      </SelectGroup>
+                      <SelectGroup>
+                        <SelectLabel>Stock out</SelectLabel>
+                        {STOCK_OUT_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className={cn("grid gap-4", isIn ? "grid-cols-2" : "grid-cols-1")}>
+                  <div className="space-y-2">
+                    <Label>Quantity</Label>
+                    <Input data-testid="input-adjust-quantity" type="number" min="1" value={stockAdjustment.quantity || ""} onChange={e => setStockAdjustment({ ...stockAdjustment, quantity: Math.abs(parseInt(e.target.value) || 0) })} />
+                  </div>
+                  {isIn && (
+                    <div className="space-y-2">
+                      <Label>Unit cost (£)</Label>
+                      <Input
+                        data-testid="input-adjust-unit-cost" inputMode="decimal"
+                        placeholder={stockAdjustment.type === "Return to Stores" && stockAdjustment.jobId ? "Job's issue cost" : selectedItem?.unitCost ? Number(selectedItem.unitCost).toFixed(2) : "0.00"}
+                        value={stockAdjustment.unitCost}
+                        onChange={e => setStockAdjustment({ ...stockAdjustment, unitCost: e.target.value })}
+                      />
+                    </div>
+                  )}
+                </div>
+                {forJob && (
+                  <div className="space-y-2">
+                    <Label>Job</Label>
+                    <Select value={stockAdjustment.jobId || NONE} onValueChange={v => setStockAdjustment({ ...stockAdjustment, jobId: v === NONE ? "" : v })}>
+                      <SelectTrigger data-testid="select-adjust-job"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NONE}>No job</SelectItem>
+                        {(jobsData as any[])
+                          .filter(j => j.status !== "Completed" || j.id === stockAdjustment.jobId)
+                          .map(j => <SelectItem key={j.id} value={j.id}>{j.id} – {j.title}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <Label>Reference</Label>
+                  <Input data-testid="input-adjust-reference" value={stockAdjustment.reference} onChange={e => setStockAdjustment({ ...stockAdjustment, reference: e.target.value })} placeholder="Delivery note, PO number or note" />
+                </div>
+                {stockAdjustment.quantity > 0 && selectedItem && (
+                  <p className={cn("text-sm", after < 0 ? "text-destructive" : "text-muted-foreground")}>
+                    {after < 0 ? `Only ${selectedItem.stock} ${selectedItem.unit} in stock.` : `Stock after: ${after} ${selectedItem.unit}`}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
           <DialogFooter>
             <Button variant="outline" onClick={() => setAdjustStockDialogOpen(false)}>Cancel</Button>
             <Button
               data-testid="button-submit-adjust-stock"
               onClick={() => selectedItem && adjustStockMutation.mutate({ item: selectedItem, adjustment: stockAdjustment })}
-              disabled={adjustStockMutation.isPending || stockAdjustment.quantity === 0}
+              disabled={adjustStockMutation.isPending || stockAdjustment.quantity <= 0}
             >
               {adjustStockMutation.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
-              Confirm Adjustment
+              Confirm
             </Button>
           </DialogFooter>
         </DialogContent>

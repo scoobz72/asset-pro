@@ -192,7 +192,7 @@ export default function DataImport() {
 
             {result.stockAdjustments > 0 && (
               <p className="text-xs text-muted-foreground">
-                {result.stockAdjustments} stock level change{result.stockAdjustments === 1 ? "" : "s"} will be logged as "Import Adjustment".
+                {result.stockAdjustments} stock level change{result.stockAdjustments === 1 ? "" : "s"} will be recorded as stock movements (opening stock for new parts, "Import Adjustment" for existing ones).
               </p>
             )}
 

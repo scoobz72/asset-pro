@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, integer, numeric, timestamp, boolean, jsonb, date, primaryKey, foreignKey, unique, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
-import { LOCATION_TYPES, CRITICALITIES } from "./constants";
+import { LOCATION_TYPES, CRITICALITIES, STOCK_MOVEMENT_TYPES } from "./constants";
 
 /**
  * Multi-company model: every business record carries company_id, and record codes
@@ -205,10 +205,53 @@ export const stockTransactions = pgTable("stock_transactions", {
   quantity: integer("quantity").notNull(),
   userId: text("user_id"),
   reference: text("reference"),
+  /** When the movement was recorded (server time). `date` is kept for older rows. */
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  /** FIFO cost per unit of this movement (average across the lots it used, for "out"). */
+  unitCost: numeric("unit_cost", { precision: 12, scale: 4 }),
+  /** Signed value: positive for stock in, negative for stock out. Null on pre-ledger rows. */
+  value: numeric("value", { precision: 12, scale: 2 }),
+  /** Stock on hand for the part straight after this movement. */
+  balanceAfter: integer("balance_after"),
+  jobId: text("job_id"),
+  assetId: text("asset_id"),
+  poId: text("po_id"),
   companyId: companyId(),
 }, (t) => [
   primaryKey({ columns: [t.companyId, t.id], name: "stock_transactions_pkey" }),
   foreignKey({ name: "stock_transactions_part_fk", columns: [t.companyId, t.partId], foreignColumns: [inventory.companyId, inventory.id] }),
+  foreignKey({ name: "stock_transactions_job_fk", columns: [t.companyId, t.jobId], foreignColumns: [jobs.companyId, jobs.id] }),
+  foreignKey({ name: "stock_transactions_asset_fk", columns: [t.companyId, t.assetId], foreignColumns: [assets.companyId, assets.id] }),
+  index("stock_transactions_part_idx").on(t.companyId, t.partId, t.createdAt),
+]);
+
+/** A FIFO cost layer: one per receipt. Issues consume the oldest lots with stock left. */
+export const stockLots = pgTable("stock_lots", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  partId: text("part_id").notNull(),
+  receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+  quantityReceived: integer("quantity_received").notNull(),
+  quantityRemaining: integer("quantity_remaining").notNull(),
+  unitCost: numeric("unit_cost", { precision: 12, scale: 4 }).notNull().default("0"),
+  transactionId: text("transaction_id"),
+  companyId: companyId(),
+}, (t) => [
+  foreignKey({ name: "stock_lots_part_fk", columns: [t.companyId, t.partId], foreignColumns: [inventory.companyId, inventory.id] }),
+  index("stock_lots_open_idx").on(t.companyId, t.partId, t.receivedAt),
+]);
+
+/** One row per part per stock take, so each part's count history is kept. */
+export const stockTakes = pgTable("stock_takes", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  partId: text("part_id").notNull(),
+  countedAt: timestamp("counted_at", { withTimezone: true }).notNull().defaultNow(),
+  expected: integer("expected").notNull(),
+  counted: integer("counted").notNull(),
+  userName: text("user_name"),
+  companyId: companyId(),
+}, (t) => [
+  foreignKey({ name: "stock_takes_part_fk", columns: [t.companyId, t.partId], foreignColumns: [inventory.companyId, inventory.id] }),
+  index("stock_takes_part_idx").on(t.companyId, t.partId, t.countedAt),
 ]);
 
 export const purchaseOrders = pgTable("purchase_orders", {
@@ -294,6 +337,32 @@ export const insertSupplierSchema = createInsertSchema(suppliers, {
 export const insertJobSchema = createInsertSchema(jobs).omit({ companyId: true, createdAt: true, completedAt: true });
 export const insertTemplateSchema = createInsertSchema(templates).omit({ companyId: true });
 export const insertStockTransactionSchema = createInsertSchema(stockTransactions).omit({ companyId: true });
+
+/** A stock movement request. The server works out cost, balance and lots. */
+export const stockMovementSchema = z.object({
+  partId: z.string().trim().min(1).max(50),
+  type: z.enum(STOCK_MOVEMENT_TYPES),
+  /** Units moved. Positive for in/out types; signed (non-zero) for adjustment types. */
+  quantity: z.number().int().refine((n) => n !== 0, "Quantity can't be 0").refine((n) => Math.abs(n) <= 1_000_000, "Quantity is too large"),
+  /** Cost per unit for stock coming in; defaults to the part's unit cost. Ignored for out. */
+  unitCost: z.union([z.number(), z.string()]).transform((v) => Number(v)).refine((n) => Number.isFinite(n) && n >= 0 && n < 100_000_000, "Unit cost must be 0 or more").optional().nullable(),
+  jobId: z.string().trim().min(1).max(50).optional().nullable(),
+  assetId: z.string().trim().min(1).max(50).optional().nullable(),
+  poId: z.string().trim().min(1).max(50).optional().nullable(),
+  reference: z.string().trim().max(200).optional().nullable(),
+}).strict();
+export type StockMovementInput = z.infer<typeof stockMovementSchema>;
+
+export const stockTakeSchema = z.object({
+  counts: z.array(z.object({
+    partId: z.string().trim().min(1).max(50),
+    counted: z.number().int().min(0).max(1_000_000),
+    /** Why the count differs (e.g. "Damaged"); saved as the adjustment's reference. */
+    reason: z.string().trim().max(100).optional().nullable(),
+  }).strict()).min(1).max(5000),
+  reference: z.string().trim().max(200).optional().nullable(),
+}).strict();
+export type StockTakeInput = z.infer<typeof stockTakeSchema>;
 export const insertPurchaseOrderSchema = createInsertSchema(purchaseOrders, {
   total: () => numericInput.optional(),
 }).omit({ companyId: true });
@@ -307,7 +376,8 @@ export const updateLocationSchema = insertLocationSchema.omit({ id: true }).part
 export const updateStoreRoomSchema = insertStoreRoomSchema.omit({ id: true }).partial();
 export const updateBinSchema = insertBinSchema.omit({ id: true }).partial();
 export const updateAssetSchema = insertAssetSchema.omit({ id: true }).partial();
-export const updateInventorySchema = insertInventorySchema.omit({ id: true }).partial();
+// Stock levels change only through stock movements (server/stock/ledger.ts), never by edit.
+export const updateInventorySchema = insertInventorySchema.omit({ id: true, stock: true, lastUsed: true, lastStockTaken: true, lastReplenished: true }).partial();
 export const updateSupplierSchema = insertSupplierSchema.omit({ id: true }).partial();
 export const updateJobSchema = insertJobSchema.omit({ id: true }).partial();
 export const updateTemplateSchema = insertTemplateSchema.omit({ id: true }).partial();
@@ -381,6 +451,8 @@ export type Supplier = typeof suppliers.$inferSelect;
 export type Job = typeof jobs.$inferSelect;
 export type Template = typeof templates.$inferSelect;
 export type StockTransaction = typeof stockTransactions.$inferSelect;
+export type StockLot = typeof stockLots.$inferSelect;
+export type StockTake = typeof stockTakes.$inferSelect;
 export type PurchaseOrder = typeof purchaseOrders.$inferSelect;
 export type AssetAudit = typeof assetAudits.$inferSelect;
 export type MaintenanceRequest = typeof maintenanceRequests.$inferSelect;

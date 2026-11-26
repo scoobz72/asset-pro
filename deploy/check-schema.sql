@@ -9,3 +9,6 @@ SELECT unit_cost, reorder_qty, bin_id, manufacturer_part_no FROM inventory LIMIT
 SELECT category, manufacturer, model, serial_number, criticality, install_date, parent_asset_id FROM assets LIMIT 0;
 SELECT quantity FROM asset_parts LIMIT 0;
 SELECT created_at, completed_at FROM jobs LIMIT 0;
+SELECT created_at, unit_cost, value, balance_after, job_id, asset_id, po_id FROM stock_transactions LIMIT 0;
+SELECT id, part_id, received_at, quantity_received, quantity_remaining, unit_cost, transaction_id FROM stock_lots LIMIT 0;
+SELECT id, part_id, counted_at, expected, counted, user_name FROM stock_takes LIMIT 0;
