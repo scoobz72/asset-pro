@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Wrench, ShieldCheck, Mail, Key } from "lucide-react";
+import { LogoFull } from "@/components/Logo";
+import { ShieldCheck, Mail, Key } from "lucide-react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLocation } from "wouter";
 import { useLogin } from "@/hooks/use-auth";
@@ -44,10 +45,7 @@ export default function Auth({ onLogin }: { onLogin: () => void }) {
 
       <div className="w-full max-w-md relative z-10">
         <div className="flex flex-col items-center mb-8">
-          <div className="size-12 rounded-xl bg-primary flex items-center justify-center shadow-lg mb-4">
-             <Wrench className="size-6 text-primary-foreground" />
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">ProMaintain</h1>
+          <h1><LogoFull className="text-4xl" /></h1>
         </div>
 
         <Card className="border-border/50 shadow-xl bg-card/80 backdrop-blur-xl">
@@ -108,7 +106,7 @@ export default function Auth({ onLogin }: { onLogin: () => void }) {
               Each company's data is kept separate. You only ever see your own company.
             </p>
             <p className="text-xs text-muted-foreground mt-2">
-              New to ProMaintain? <a href="/#request-access" className="text-primary hover:underline font-medium">Request access</a>
+              New to myCMMS? <a href="/#request-access" className="text-primary hover:underline font-medium">Request access</a>
             </p>
           </CardFooter>
         </Card>

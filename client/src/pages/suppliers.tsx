@@ -16,6 +16,7 @@ import {
   Plus, 
   MoreHorizontal, 
   Mail,
+  Phone,
   Star,
   Clock,
   Package,
@@ -57,20 +58,25 @@ function SupplierDialog({
   const [name, setName] = useState(supplier?.name ?? "");
   const [categories, setCategories] = useState(supplier?.categories?.join(", ") ?? "");
   const [rating, setRating] = useState(supplier?.rating ?? "4.0");
-  const [leadTime, setLeadTime] = useState(supplier?.leadTime ?? "");
-  const [contact, setContact] = useState(supplier?.contact ?? "");
+  const [supplierId, setSupplierId] = useState(supplier?.id ?? `SUP-${String(Date.now()).slice(-4)}`);
+  const [leadTimeDays, setLeadTimeDays] = useState(supplier?.leadTimeDays == null ? "" : String(supplier.leadTimeDays));
+  const [contactName, setContactName] = useState(supplier?.contactName ?? "");
+  const [email, setEmail] = useState(supplier?.email ?? "");
+  const [phone, setPhone] = useState(supplier?.phone ?? "");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const data: any = {
       name,
       categories: categories.split(",").map(c => c.trim()).filter(Boolean),
-      rating,
-      leadTime,
-      contact,
+      rating: rating === "" ? null : rating,
+      leadTimeDays: leadTimeDays.trim() === "" ? null : Math.max(0, parseInt(leadTimeDays, 10) || 0),
+      contactName: contactName.trim() || null,
+      email: email.trim() || null,
+      phone: phone.trim() || null,
     };
     if (!isEdit) {
-      data.id = `SUP-${String(Date.now()).slice(-4)}`;
+      data.id = supplierId.trim();
     }
     onSave(data);
   };
@@ -85,6 +91,18 @@ function SupplierDialog({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {!isEdit && (
+            <div className="space-y-2">
+              <Label htmlFor="supplier-id">Supplier ID</Label>
+              <Input
+                id="supplier-id"
+                data-testid="input-supplier-id"
+                value={supplierId}
+                onChange={e => setSupplierId(e.target.value)}
+                required
+              />
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="supplier-name">Name</Label>
             <Input 
@@ -120,26 +138,49 @@ function SupplierDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="supplier-leadtime">Lead Time</Label>
+              <Label htmlFor="supplier-leadtime">Lead Time (days)</Label>
               <Input 
                 id="supplier-leadtime" 
                 data-testid="input-supplier-leadtime"
-                value={leadTime} 
-                onChange={e => setLeadTime(e.target.value)} 
-                placeholder="e.g. 2-3 days"
+                type="number"
+                min="0"
+                value={leadTimeDays} 
+                onChange={e => setLeadTimeDays(e.target.value)} 
+                placeholder="e.g. 3"
               />
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="supplier-contact">Contact Email</Label>
-            <Input 
-              id="supplier-contact" 
-              data-testid="input-supplier-contact"
-              type="email" 
-              value={contact} 
-              onChange={e => setContact(e.target.value)} 
-              placeholder="email@example.com"
+            <Label htmlFor="supplier-contact-name">Contact Name</Label>
+            <Input
+              id="supplier-contact-name"
+              data-testid="input-supplier-contact-name"
+              value={contactName}
+              onChange={e => setContactName(e.target.value)}
             />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="supplier-contact">Email</Label>
+              <Input 
+                id="supplier-contact" 
+                data-testid="input-supplier-contact"
+                type="email" 
+                value={email} 
+                onChange={e => setEmail(e.target.value)} 
+                placeholder="email@example.com"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="supplier-phone">Phone</Label>
+              <Input
+                id="supplier-phone"
+                data-testid="input-supplier-phone"
+                type="tel"
+                value={phone}
+                onChange={e => setPhone(e.target.value)}
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} data-testid="button-cancel-supplier">
@@ -323,16 +364,29 @@ export default function Suppliers() {
                   <p className="text-xs text-muted-foreground flex items-center justify-end">
                     <Clock className="mr-1.5 size-3 opacity-70" /> Avg. Lead Time
                   </p>
-                  <p className="text-sm font-medium">{supplier.leadTime}</p>
+                  <p className="text-sm font-medium">{supplier.leadTimeDays == null ? "—" : `${supplier.leadTimeDays} day${supplier.leadTimeDays === 1 ? "" : "s"}`}</p>
                 </div>
               </div>
               
-              <div className="bg-muted/30 p-2 rounded-md border flex items-center text-sm">
-                <Mail className="size-4 text-muted-foreground mr-2 shrink-0" />
-                <a href={`mailto:${supplier.contact}`} className="text-blue-600 hover:underline truncate" data-testid={`link-supplier-email-${supplier.id}`}>
-                  {supplier.contact}
-                </a>
-              </div>
+              {(supplier.contactName || supplier.email || supplier.phone) && (
+                <div className="bg-muted/30 p-2 rounded-md border text-sm space-y-1">
+                  {supplier.contactName && <div className="font-medium">{supplier.contactName}</div>}
+                  {supplier.email && (
+                    <div className="flex items-center">
+                      <Mail className="size-4 text-muted-foreground mr-2 shrink-0" />
+                      <a href={`mailto:${supplier.email}`} className="text-blue-600 hover:underline truncate" data-testid={`link-supplier-email-${supplier.id}`}>
+                        {supplier.email}
+                      </a>
+                    </div>
+                  )}
+                  {supplier.phone && (
+                    <div className="flex items-center">
+                      <Phone className="size-4 text-muted-foreground mr-2 shrink-0" />
+                      <a href={`tel:${supplier.phone.replace(/\s/g, "")}`} className="hover:underline">{supplier.phone}</a>
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         ))}

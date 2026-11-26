@@ -8,6 +8,8 @@ import {
   insertUserSchema, updateUserSchema,
   insertSiteSchema, updateSiteSchema,
   insertLocationSchema, updateLocationSchema,
+  insertStoreRoomSchema, updateStoreRoomSchema,
+  insertBinSchema, updateBinSchema,
   insertAssetSchema, updateAssetSchema, assetPartsInputSchema,
   insertInventorySchema, updateInventorySchema,
   insertSupplierSchema, updateSupplierSchema,
@@ -138,6 +140,52 @@ export async function registerRoutes(
     res.status(204).end();
   });
 
+  // ===== STORE ROOMS & BINS =====
+  app.get("/api/store-rooms", async (req, res) => {
+    res.json(await storage.getStoreRooms(companyOf(req)));
+  });
+  app.post("/api/store-rooms", async (req, res) => {
+    const data = parseBody(insertStoreRoomSchema, req, res);
+    if (!data) return;
+    res.status(201).json(await storage.createStoreRoom(companyOf(req), data));
+  });
+  app.patch("/api/store-rooms/:id", async (req, res) => {
+    const data = parseUpdate(updateStoreRoomSchema, req, res);
+    if (!data) return;
+    const room = await storage.updateStoreRoom(companyOf(req), String(req.params.id), data);
+    if (!room) return res.status(404).json({ message: "Store room not found" });
+    res.json(room);
+  });
+  app.delete("/api/store-rooms/:id", requirePrivileged, async (req, res) => {
+    await storage.deleteStoreRoom(companyOf(req), String(req.params.id));
+    res.status(204).end();
+  });
+
+  app.get("/api/bins", async (req, res) => {
+    res.json(await storage.getBins(companyOf(req)));
+  });
+  app.post("/api/bins", async (req, res) => {
+    const data = parseBody(insertBinSchema, req, res);
+    if (!data) return;
+    res.status(201).json(await storage.createBin(companyOf(req), data));
+  });
+  app.patch("/api/bins/:id", async (req, res) => {
+    const data = parseUpdate(updateBinSchema, req, res);
+    if (!data) return;
+    const bin = await storage.updateBin(companyOf(req), String(req.params.id), data);
+    if (!bin) return res.status(404).json({ message: "Bin not found" });
+    res.json(bin);
+  });
+  app.delete("/api/bins/:id", requirePrivileged, async (req, res) => {
+    await storage.deleteBin(companyOf(req), String(req.params.id));
+    res.status(204).end();
+  });
+
+  // ===== DASHBOARD =====
+  app.get("/api/dashboard/summary", async (req, res) => {
+    res.json(await storage.getDashboardSummary(companyOf(req)));
+  });
+
   // ===== ASSETS =====
   app.get("/api/assets", async (req, res) => {
     const data = await storage.getAssets(companyOf(req));
@@ -174,6 +222,9 @@ export async function registerRoutes(
   app.delete("/api/assets/:id", requirePrivileged, async (req, res) => {
     await storage.deleteAsset(companyOf(req), String(req.params.id));
     res.status(204).end();
+  });
+  app.get("/api/asset-parts", async (req, res) => {
+    res.json(await storage.getAllAssetParts(companyOf(req)));
   });
   app.get("/api/assets/:id/parts", async (req, res) => {
     const parts = await storage.getAssetParts(companyOf(req), String(req.params.id));

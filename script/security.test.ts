@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import express from "express";
 import { errorHandler } from "../server/errors";
 import { hashPassword, verifyPassword, isPasswordHash } from "../server/password";
-import { insertUserSchema, updatePurchaseOrderSchema } from "../shared/schema";
+import { insertUserSchema, updatePurchaseOrderSchema, updateJobSchema, insertAssetSchema, assetPartsInputSchema } from "../shared/schema";
 
 const SECRET = "Sup3r-Secret-Passw0rd";
 
@@ -95,4 +95,27 @@ test("input schemas allow-list fields and reject unknown roles", () => {
   assert.equal(insertUserSchema.safeParse({ name: "X", role: "Superuser" }).success, false);
   assert.equal(insertUserSchema.safeParse({ name: "X", password: "short" }).success, false);
   assert.deepEqual(updatePurchaseOrderSchema.parse({ id: "PO-X", status: "Draft" }), { status: "Draft" });
+});
+
+test("job timestamps are server-set and never accepted from the client", () => {
+  const parsed = updateJobSchema.parse({
+    status: "Completed",
+    createdAt: "2020-01-01T00:00:00Z",
+    completedAt: "2020-01-02T00:00:00Z",
+  });
+  assert.deepEqual(parsed, { status: "Completed" });
+});
+
+test("asset fields are validated against the fixed lists", () => {
+  assert.equal(insertAssetSchema.safeParse({ id: "A1", name: "Press", criticality: "D" }).success, false);
+  assert.equal(insertAssetSchema.safeParse({ id: "A1", name: "Press", installDate: "31/12/2020" }).success, false);
+  assert.equal(insertAssetSchema.safeParse({ id: "A1", name: "Press", criticality: "A", installDate: "2020-12-31" }).success, true);
+});
+
+test("asset spares accept both the old ID list and part/quantity pairs", () => {
+  assert.deepEqual(assetPartsInputSchema.parse(["P1", { partId: "P2", quantity: 3 }]), [
+    { partId: "P1", quantity: 1 },
+    { partId: "P2", quantity: 3 },
+  ]);
+  assert.equal(assetPartsInputSchema.safeParse([{ partId: "P1", quantity: 0 }]).success, false);
 });

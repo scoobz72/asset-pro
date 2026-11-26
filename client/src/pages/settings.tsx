@@ -85,7 +85,7 @@ export default function Settings({
           <Card>
             <CardHeader>
               <CardTitle>Application Preferences</CardTitle>
-              <CardDescription>Customize how ProMaintain works for you.</CardDescription>
+              <CardDescription>Customise how myCMMS works for you.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">

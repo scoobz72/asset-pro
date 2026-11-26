@@ -1,6 +1,8 @@
 # Plan: real data model, dashboards and Excel import
 
-Status: **implementation-ready, awaiting sign-off on the decisions in section 7** (26 Nov 2026).
+Status: **agreed (26 Nov 2026), all section 7 defaults accepted. Parts 1, 2 and the
+non-import UI are built; part 3 (Excel import) and part 4 (example workbook) wait for
+`exceljs`.** See "Progress" at the end.
 Branch: `move-off-replit`. Live at https://mycmms.co.uk (IONOS VPS, see `deploy/README.md`).
 
 The work has four parts, all shipped together:
@@ -366,9 +368,7 @@ Companies page, not into MyCMMS HQ.
 
 ---
 
-## 7. Decisions needed before building
-
-These are the recommended defaults. Reply with any you want changed.
+## 7. Decisions (agreed 26 Nov 2026: all defaults accepted)
 
 1. **Blank cell on an existing record**: *leave the field unchanged* (recommended, safe for
    partial sheets), or clear the field.
@@ -379,3 +379,16 @@ These are the recommended defaults. Reply with any you want changed.
 4. **ID matching**: *case-sensitive* (recommended, matches how IDs work today), or
    case-insensitive (`bin-a01` = `BIN-A01`).
 5. **Unit**: *fixed list in 1.2* (recommended), or free text with the list only as suggestions.
+
+---
+
+## Progress
+
+| Step (5.1) | State |
+|---|---|
+| 1. Schema | Done: `shared/schema.ts`, fixed lists in `shared/constants.ts` (no imports, so the browser can use them) |
+| 2. Server | Done: store rooms and bins CRUD, `completed_at` handling, `GET /api/asset-parts` (replaces one request per asset on the inventory page), `deploy/pre-push.sql` |
+| 3. UI | Done: assets (make, model, criticality, parent…), inventory (bin picker, cost, reorder qty, MPN), stock-take by store room, suppliers (contact name, email, phone, days), locations page rebuilt with store rooms and bins |
+| 4. Dashboard and reports | Done: `GET /api/dashboard/summary`; AI box, date filter and fake trends removed |
+| 5–7. Import, settings UI, example workbook | **Not started.** Needs `npm install exceljs` |
+| 8. Tests | Schema tests added to `script/security.test.ts`. A full `npm run check` has not been run yet (no `node_modules` in the build session): run it on the VPS before deploying |

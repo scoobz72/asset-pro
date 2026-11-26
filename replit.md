@@ -1,4 +1,4 @@
-# ProMaintain CMMS
+# myCMMS (Asset Pro)
 
 A full-stack Computerized Maintenance Management System (CMMS) web application.
 
@@ -33,6 +33,8 @@ shared/
 - `users` - Team members (id serial, name, role, status, avatar, email)
 - `sites` - Physical sites (id text PK)
 - `locations` - Locations within sites (id text PK, siteId FK)
+- `store_rooms` - Spares store rooms within sites (id text PK, siteId FK)
+- `bins` - Bins within store rooms; parts point at a bin (`inventory.bin_id`)
 - `assets` - Equipment/machinery (id text PK, locationId FK, status, health)
 - `asset_parts` - Many-to-many asset-inventory relationship
 - `inventory` - Parts/consumables (id text PK, stock, minStock, suppliers FKs)

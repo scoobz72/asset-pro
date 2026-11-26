@@ -1,7 +1,8 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, numeric, timestamp, boolean, jsonb, primaryKey, foreignKey, unique, uniqueIndex, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, numeric, timestamp, boolean, jsonb, date, primaryKey, foreignKey, unique, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { LOCATION_TYPES, CRITICALITIES } from "./constants";
 
 /**
  * Multi-company model: every business record carries company_id, and record codes
@@ -9,6 +10,8 @@ import { z } from "zod";
  * Composite foreign keys make it impossible to link records across companies.
  */
 export const COMPANY_STATUSES = ["Active", "Suspended"] as const;
+
+export * from "./constants";
 
 export const companies = pgTable("companies", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
@@ -48,6 +51,8 @@ export const users = pgTable("users", {
 export const sites = pgTable("sites", {
   id: text("id").notNull(),
   name: text("name").notNull(),
+  address: text("address"),
+  postcode: text("postcode"),
   companyId: companyId(),
 }, (t) => [
   primaryKey({ columns: [t.companyId, t.id], name: "sites_pkey" }),
@@ -57,10 +62,32 @@ export const locations = pgTable("locations", {
   id: text("id").notNull(),
   name: text("name").notNull(),
   siteId: text("site_id").notNull(),
+  type: text("type").notNull().default("Other"),
   companyId: companyId(),
 }, (t) => [
   primaryKey({ columns: [t.companyId, t.id], name: "locations_pkey" }),
   foreignKey({ name: "locations_site_fk", columns: [t.companyId, t.siteId], foreignColumns: [sites.companyId, sites.id] }),
+]);
+
+/** Where spare parts are kept: a store room belongs to a site and holds bins. */
+export const storeRooms = pgTable("store_rooms", {
+  id: text("id").notNull(),
+  name: text("name").notNull(),
+  siteId: text("site_id").notNull(),
+  companyId: companyId(),
+}, (t) => [
+  primaryKey({ columns: [t.companyId, t.id], name: "store_rooms_pkey" }),
+  foreignKey({ name: "store_rooms_site_fk", columns: [t.companyId, t.siteId], foreignColumns: [sites.companyId, sites.id] }),
+]);
+
+export const bins = pgTable("bins", {
+  id: text("id").notNull(),
+  storeRoomId: text("store_room_id").notNull(),
+  description: text("description"),
+  companyId: companyId(),
+}, (t) => [
+  primaryKey({ columns: [t.companyId, t.id], name: "bins_pkey" }),
+  foreignKey({ name: "bins_store_room_fk", columns: [t.companyId, t.storeRoomId], foreignColumns: [storeRooms.companyId, storeRooms.id] }),
 ]);
 
 export const assets = pgTable("assets", {
@@ -71,18 +98,28 @@ export const assets = pgTable("assets", {
   health: integer("health").notNull().default(100),
   lastService: text("last_service"),
   image: text("image"),
+  category: text("category"),
+  manufacturer: text("manufacturer"),
+  model: text("model"),
+  serialNumber: text("serial_number"),
+  criticality: text("criticality"),
+  installDate: date("install_date"),
+  parentAssetId: text("parent_asset_id"),
   companyId: companyId(),
 }, (t) => [
   primaryKey({ columns: [t.companyId, t.id], name: "assets_pkey" }),
   foreignKey({ name: "assets_location_fk", columns: [t.companyId, t.locationId], foreignColumns: [locations.companyId, locations.id] }),
+  foreignKey({ name: "assets_parent_fk", columns: [t.companyId, t.parentAssetId], foreignColumns: [t.companyId, t.id] }),
 ]);
 
 export const assetParts = pgTable("asset_parts", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   assetId: text("asset_id").notNull(),
   partId: text("part_id").notNull(),
+  quantity: integer("quantity").notNull().default(1),
   companyId: companyId(),
 }, (t) => [
+  unique("asset_parts_company_asset_part_key").on(t.companyId, t.assetId, t.partId),
   foreignKey({ name: "asset_parts_asset_fk", columns: [t.companyId, t.assetId], foreignColumns: [assets.companyId, assets.id] }),
   foreignKey({ name: "asset_parts_part_fk", columns: [t.companyId, t.partId], foreignColumns: [inventory.companyId, inventory.id] }),
 ]);
@@ -94,7 +131,10 @@ export const inventory = pgTable("inventory", {
   stock: integer("stock").notNull().default(0),
   minStock: integer("min_stock").notNull().default(0),
   unit: text("unit").notNull().default("pcs"),
-  location: text("location"),
+  unitCost: numeric("unit_cost", { precision: 10, scale: 2 }),
+  reorderQty: integer("reorder_qty"),
+  binId: text("bin_id"),
+  manufacturerPartNo: text("manufacturer_part_no"),
   lastUsed: text("last_used"),
   lastStockTaken: text("last_stock_taken"),
   lastReplenished: text("last_replenished"),
@@ -104,6 +144,9 @@ export const inventory = pgTable("inventory", {
   companyId: companyId(),
 }, (t) => [
   primaryKey({ columns: [t.companyId, t.id], name: "inventory_pkey" }),
+  foreignKey({ name: "inventory_bin_fk", columns: [t.companyId, t.binId], foreignColumns: [bins.companyId, bins.id] }),
+  foreignKey({ name: "inventory_primary_supplier_fk", columns: [t.companyId, t.primarySupplierId], foreignColumns: [suppliers.companyId, suppliers.id] }),
+  foreignKey({ name: "inventory_secondary_supplier_fk", columns: [t.companyId, t.secondarySupplierId], foreignColumns: [suppliers.companyId, suppliers.id] }),
 ]);
 
 export const suppliers = pgTable("suppliers", {
@@ -111,8 +154,10 @@ export const suppliers = pgTable("suppliers", {
   name: text("name").notNull(),
   categories: text("categories").array().notNull().default(sql`'{}'::text[]`),
   rating: numeric("rating", { precision: 2, scale: 1 }),
-  leadTime: text("lead_time"),
-  contact: text("contact"),
+  leadTimeDays: integer("lead_time_days"),
+  contactName: text("contact_name"),
+  email: text("email"),
+  phone: text("phone"),
   companyId: companyId(),
 }, (t) => [
   primaryKey({ columns: [t.companyId, t.id], name: "suppliers_pkey" }),
@@ -128,6 +173,10 @@ export const jobs = pgTable("jobs", {
   dueDate: text("due_date"),
   templateId: text("template_id"),
   type: text("type").default("Breakdown"),
+  /** Set by the database when the job is created; never accepted from the client. */
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  /** Set by the server when the status becomes Completed, cleared if it is reopened. */
+  completedAt: timestamp("completed_at", { withTimezone: true }),
   companyId: companyId(),
 }, (t) => [
   primaryKey({ columns: [t.companyId, t.id], name: "jobs_pkey" }),
@@ -223,15 +272,26 @@ export const insertUserSchema = createInsertSchema(users, {
   password: () => z.string().min(8).max(200).nullable().optional(),
 }).omit({ companyId: true });
 export const insertSiteSchema = createInsertSchema(sites).omit({ companyId: true });
-export const insertLocationSchema = createInsertSchema(locations).omit({ companyId: true });
+export const insertLocationSchema = createInsertSchema(locations, {
+  type: () => z.enum(LOCATION_TYPES).optional(),
+}).omit({ companyId: true });
+export const insertStoreRoomSchema = createInsertSchema(storeRooms).omit({ companyId: true });
+export const insertBinSchema = createInsertSchema(bins).omit({ companyId: true });
 export const insertAssetSchema = createInsertSchema(assets, {
   health: (s) => s.int().min(0).max(100),
+  criticality: () => z.enum(CRITICALITIES).nullable().optional(),
+  installDate: () => z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD").nullable().optional(),
 }).omit({ companyId: true });
-export const insertInventorySchema = createInsertSchema(inventory).omit({ companyId: true });
+export const insertInventorySchema = createInsertSchema(inventory, {
+  unitCost: () => numericInput.nullable().optional(),
+  reorderQty: (s) => s.int().min(0).nullable().optional(),
+}).omit({ companyId: true });
 export const insertSupplierSchema = createInsertSchema(suppliers, {
   rating: () => numericInput.nullable().optional(),
+  leadTimeDays: (s) => s.int().min(0).nullable().optional(),
+  email: () => z.string().trim().toLowerCase().email().max(320).nullable().optional().or(z.literal("")),
 }).omit({ companyId: true });
-export const insertJobSchema = createInsertSchema(jobs).omit({ companyId: true });
+export const insertJobSchema = createInsertSchema(jobs).omit({ companyId: true, createdAt: true, completedAt: true });
 export const insertTemplateSchema = createInsertSchema(templates).omit({ companyId: true });
 export const insertStockTransactionSchema = createInsertSchema(stockTransactions).omit({ companyId: true });
 export const insertPurchaseOrderSchema = createInsertSchema(purchaseOrders, {
@@ -244,6 +304,8 @@ export const insertMaintenanceRequestSchema = createInsertSchema(maintenanceRequ
 export const updateUserSchema = insertUserSchema.partial();
 export const updateSiteSchema = insertSiteSchema.omit({ id: true }).partial();
 export const updateLocationSchema = insertLocationSchema.omit({ id: true }).partial();
+export const updateStoreRoomSchema = insertStoreRoomSchema.omit({ id: true }).partial();
+export const updateBinSchema = insertBinSchema.omit({ id: true }).partial();
 export const updateAssetSchema = insertAssetSchema.omit({ id: true }).partial();
 export const updateInventorySchema = insertInventorySchema.omit({ id: true }).partial();
 export const updateSupplierSchema = insertSupplierSchema.omit({ id: true }).partial();
@@ -253,7 +315,12 @@ export const updatePurchaseOrderSchema = insertPurchaseOrderSchema.omit({ id: tr
 export const updateAssetAuditSchema = insertAssetAuditSchema.omit({ id: true }).partial();
 export const updateMaintenanceRequestSchema = insertMaintenanceRequestSchema.omit({ id: true }).partial();
 
-export const assetPartsInputSchema = z.array(z.string().min(1)).max(500);
+/** Accepts either a list of part IDs (quantity 1 each) or a list of { partId, quantity }. */
+export const assetPartsInputSchema = z.array(z.union([
+  z.string().min(1),
+  z.object({ partId: z.string().min(1), quantity: z.number().int().min(1).max(100000).default(1) }),
+])).max(500).transform((items) => items.map((i) => typeof i === "string" ? { partId: i, quantity: 1 } : i));
+export type AssetPartInput = { partId: string; quantity: number };
 
 export const createCompanySchema = z.object({
   name: z.string().trim().min(1).max(200),
@@ -285,6 +352,8 @@ export const loginSchema = z.object({
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type InsertSite = z.infer<typeof insertSiteSchema>;
 export type InsertLocation = z.infer<typeof insertLocationSchema>;
+export type InsertStoreRoom = z.infer<typeof insertStoreRoomSchema>;
+export type InsertBin = z.infer<typeof insertBinSchema>;
 export type InsertAsset = z.infer<typeof insertAssetSchema>;
 export type InsertInventoryItem = z.infer<typeof insertInventorySchema>;
 export type InsertSupplier = z.infer<typeof insertSupplierSchema>;
@@ -304,6 +373,8 @@ export type PublicUser = Omit<User, "password">;
 export type SessionUser = PublicUser & { companyName: string };
 export type Site = typeof sites.$inferSelect;
 export type Location = typeof locations.$inferSelect;
+export type StoreRoom = typeof storeRooms.$inferSelect;
+export type Bin = typeof bins.$inferSelect;
 export type Asset = typeof assets.$inferSelect;
 export type InventoryItem = typeof inventory.$inferSelect;
 export type Supplier = typeof suppliers.$inferSelect;

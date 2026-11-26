@@ -35,6 +35,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState } from "react";
+import { LogoIcon } from "@/components/Logo";
 import { useCurrentUser, useLogout, PLATFORM_ADMIN_ROLE } from "@/hooks/use-auth";
 
 const baseNavigation = [
@@ -69,10 +70,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* Sidebar Desktop */}
       <aside className="hidden md:flex w-64 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
         <div className="p-6 flex items-center gap-3">
-          <div className="size-8 rounded-lg bg-primary flex items-center justify-center">
-             <Wrench className="size-5 text-primary-foreground" />
-          </div>
-          <span className="font-bold text-lg tracking-tight">ProMaintain</span>
+          <LogoIcon className="size-8" />
+          <span className="text-lg tracking-tight"><span className="font-normal">my</span><span className="font-extrabold">CMMS</span></span>
         </div>
         
         <nav className="flex-1 px-4 py-4 space-y-1">
@@ -118,10 +117,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </SheetTrigger>
               <SheetContent side="left" className="w-64 p-0 bg-sidebar text-sidebar-foreground border-sidebar-border">
                  <div className="p-6 flex items-center gap-3">
-                  <div className="size-8 rounded-lg bg-primary flex items-center justify-center">
-                     <Wrench className="size-5 text-primary-foreground" />
-                  </div>
-                  <span className="font-bold text-lg">ProMaintain</span>
+                  <LogoIcon className="size-8" />
+                  <span className="text-lg tracking-tight"><span className="font-normal">my</span><span className="font-extrabold">CMMS</span></span>
                 </div>
                 <nav className="px-4 py-4 space-y-1">
                   {navigation.map((item) => (

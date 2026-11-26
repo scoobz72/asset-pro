@@ -3,16 +3,36 @@ import { db } from "./db";
 import { hashPassword } from "./password";
 import {
   companies, accessRequests,
-  users, sites, locations, assets, assetParts, inventory,
+  users, sites, locations, storeRooms, bins, assets, assetParts, inventory,
   suppliers, jobs, templates, stockTransactions, purchaseOrders,
   assetAudits, maintenanceRequests,
   type InsertUser, type User, type PublicUser, type Company, type AccessRequest,
-  type InsertSite, type InsertLocation, type InsertAsset, type InsertInventoryItem,
+  type InsertSite, type InsertLocation, type InsertStoreRoom, type InsertBin, type StoreRoom, type Bin, type AssetPartInput, type InsertAsset, type InsertInventoryItem,
   type InsertSupplier, type InsertJob, type InsertTemplate, type InsertStockTransaction,
   type InsertPurchaseOrder, type InsertAssetAudit, type InsertMaintenanceRequest, type Site, type Location, type Asset,
   type InventoryItem, type Supplier, type Job, type Template,
   type StockTransaction, type PurchaseOrder, type AssetAudit, type MaintenanceRequest
 } from "@shared/schema";
+
+/** Figures for the dashboard and reports, computed in SQL for one company. */
+export interface DashboardSummary {
+  openJobs: number;
+  openedThisWeek: number;
+  openedLastWeek: number;
+  completedThisWeek: number;
+  completedLastWeek: number;
+  assetsDown: number;
+  assetsTotal: number;
+  lowStock: number;
+  /** Last 7 days, oldest first, as YYYY-MM-DD (Europe/London). */
+  daily: { day: string; opened: number; completed: number }[];
+  /** Median days between breakdowns across assets with 2+ breakdowns; null if none qualify. */
+  mtbfDays: number | null;
+  /** Mean hours from creation to completion of breakdowns completed in the last 90 days. */
+  mttrHours: number | null;
+  stockValueByCategory: { category: string; value: number; uncosted: number }[];
+  topBreakdownAssets: { assetId: string; name: string; breakdowns: number }[];
+}
 
 export interface IStorage {
   getUsers(companyId: number): Promise<PublicUser[]>;
@@ -32,13 +52,25 @@ export interface IStorage {
   updateLocation(companyId: number, id: string, data: Partial<InsertLocation>): Promise<Location | undefined>;
   deleteLocation(companyId: number, id: string): Promise<void>;
 
+  getStoreRooms(companyId: number): Promise<StoreRoom[]>;
+  createStoreRoom(companyId: number, room: InsertStoreRoom): Promise<StoreRoom>;
+  updateStoreRoom(companyId: number, id: string, data: Partial<InsertStoreRoom>): Promise<StoreRoom | undefined>;
+  deleteStoreRoom(companyId: number, id: string): Promise<void>;
+
+  getBins(companyId: number): Promise<Bin[]>;
+  createBin(companyId: number, bin: InsertBin): Promise<Bin>;
+  updateBin(companyId: number, id: string, data: Partial<InsertBin>): Promise<Bin | undefined>;
+  deleteBin(companyId: number, id: string): Promise<void>;
+
   getAssets(companyId: number): Promise<Asset[]>;
   getAsset(companyId: number, id: string): Promise<Asset | undefined>;
   createAsset(companyId: number, asset: InsertAsset): Promise<Asset>;
   updateAsset(companyId: number, id: string, data: Partial<InsertAsset>): Promise<Asset | undefined>;
   deleteAsset(companyId: number, id: string): Promise<void>;
-  getAssetParts(companyId: number, assetId: string): Promise<string[]>;
-  setAssetParts(companyId: number, assetId: string, partIds: string[]): Promise<void>;
+  getAssetParts(companyId: number, assetId: string): Promise<AssetPartInput[]>;
+  /** Every asset/part link in the company, for "used on assets" lookups. */
+  getAllAssetParts(companyId: number): Promise<{ assetId: string; partId: string; quantity: number }[]>;
+  setAssetParts(companyId: number, assetId: string, parts: AssetPartInput[]): Promise<void>;
 
   getInventory(companyId: number): Promise<InventoryItem[]>;
   getInventoryItem(companyId: number, id: string): Promise<InventoryItem | undefined>;
@@ -61,6 +93,8 @@ export interface IStorage {
   createTemplate(companyId: number, tpl: InsertTemplate): Promise<Template>;
   updateTemplate(companyId: number, id: string, data: Partial<InsertTemplate>): Promise<Template | undefined>;
   deleteTemplate(companyId: number, id: string): Promise<void>;
+
+  getDashboardSummary(companyId: number): Promise<DashboardSummary>;
 
   getStockTransactions(companyId: number): Promise<StockTransaction[]>;
   createStockTransaction(companyId: number, txn: InsertStockTransaction): Promise<StockTransaction>;
@@ -154,6 +188,36 @@ export class DatabaseStorage implements IStorage {
     await db.delete(locations).where(and(eq(locations.companyId, companyId), eq(locations.id, id)));
   }
 
+  async getStoreRooms(companyId: number): Promise<StoreRoom[]> {
+    return db.select().from(storeRooms).where(eq(storeRooms.companyId, companyId));
+  }
+  async createStoreRoom(companyId: number, room: InsertStoreRoom): Promise<StoreRoom> {
+    const [r] = await db.insert(storeRooms).values({ ...room, companyId }).returning();
+    return r;
+  }
+  async updateStoreRoom(companyId: number, id: string, data: Partial<InsertStoreRoom>): Promise<StoreRoom | undefined> {
+    const [r] = await db.update(storeRooms).set(data).where(and(eq(storeRooms.companyId, companyId), eq(storeRooms.id, id))).returning();
+    return r;
+  }
+  async deleteStoreRoom(companyId: number, id: string): Promise<void> {
+    await db.delete(storeRooms).where(and(eq(storeRooms.companyId, companyId), eq(storeRooms.id, id)));
+  }
+
+  async getBins(companyId: number): Promise<Bin[]> {
+    return db.select().from(bins).where(eq(bins.companyId, companyId));
+  }
+  async createBin(companyId: number, bin: InsertBin): Promise<Bin> {
+    const [b] = await db.insert(bins).values({ ...bin, companyId }).returning();
+    return b;
+  }
+  async updateBin(companyId: number, id: string, data: Partial<InsertBin>): Promise<Bin | undefined> {
+    const [b] = await db.update(bins).set(data).where(and(eq(bins.companyId, companyId), eq(bins.id, id))).returning();
+    return b;
+  }
+  async deleteBin(companyId: number, id: string): Promise<void> {
+    await db.delete(bins).where(and(eq(bins.companyId, companyId), eq(bins.id, id)));
+  }
+
   async getAssets(companyId: number): Promise<Asset[]> {
     return db.select().from(assets).where(eq(assets.companyId, companyId));
   }
@@ -175,16 +239,24 @@ export class DatabaseStorage implements IStorage {
       await tx.delete(assets).where(and(eq(assets.companyId, companyId), eq(assets.id, id)));
     });
   }
-  async getAssetParts(companyId: number, assetId: string): Promise<string[]> {
-    const rows = await db.select().from(assetParts)
+  async getAssetParts(companyId: number, assetId: string): Promise<AssetPartInput[]> {
+    return db.select({ partId: assetParts.partId, quantity: assetParts.quantity }).from(assetParts)
       .where(and(eq(assetParts.companyId, companyId), eq(assetParts.assetId, assetId)));
-    return rows.map(r => r.partId);
   }
-  async setAssetParts(companyId: number, assetId: string, partIds: string[]): Promise<void> {
+  async getAllAssetParts(companyId: number): Promise<{ assetId: string; partId: string; quantity: number }[]> {
+    return db.select({ assetId: assetParts.assetId, partId: assetParts.partId, quantity: assetParts.quantity })
+      .from(assetParts).where(eq(assetParts.companyId, companyId));
+  }
+  async setAssetParts(companyId: number, assetId: string, parts: AssetPartInput[]): Promise<void> {
+    // The same part listed twice is merged, so the unique (asset, part) key can't be hit.
+    const merged = new Map<string, number>();
+    for (const p of parts) merged.set(p.partId, (merged.get(p.partId) ?? 0) + p.quantity);
     await db.transaction(async (tx) => {
       await tx.delete(assetParts).where(and(eq(assetParts.companyId, companyId), eq(assetParts.assetId, assetId)));
-      if (partIds.length > 0) {
-        await tx.insert(assetParts).values(partIds.map(partId => ({ companyId, assetId, partId })));
+      if (merged.size > 0) {
+        await tx.insert(assetParts).values(
+          Array.from(merged, ([partId, quantity]) => ({ companyId, assetId, partId, quantity })),
+        );
       }
     });
   }
@@ -231,15 +303,109 @@ export class DatabaseStorage implements IStorage {
     return j;
   }
   async createJob(companyId: number, job: InsertJob): Promise<Job> {
-    const [j] = await db.insert(jobs).values({ ...job, companyId }).returning();
+    const completedAt = job.status === "Completed" ? new Date() : null;
+    const [j] = await db.insert(jobs).values({ ...job, companyId, completedAt }).returning();
     return j;
   }
   async updateJob(companyId: number, id: string, data: Partial<InsertJob>): Promise<Job | undefined> {
-    const [j] = await db.update(jobs).set(data).where(and(eq(jobs.companyId, companyId), eq(jobs.id, id))).returning();
+    // completed_at follows the status: stamped when a job becomes Completed (keeping the
+    // original time if it already was), cleared when it is reopened. Done in one UPDATE
+    // so it can't race with another edit.
+    const completedAt = data.status === undefined
+      ? undefined
+      : data.status === "Completed"
+        ? sql`coalesce(${jobs.completedAt}, now())`
+        : sql`null`;
+    const [j] = await db.update(jobs)
+      .set(completedAt === undefined ? data : { ...data, completedAt })
+      .where(and(eq(jobs.companyId, companyId), eq(jobs.id, id))).returning();
     return j;
   }
   async deleteJob(companyId: number, id: string): Promise<void> {
     await db.delete(jobs).where(and(eq(jobs.companyId, companyId), eq(jobs.id, id)));
+  }
+
+  async getDashboardSummary(companyId: number): Promise<DashboardSummary> {
+    const num = (v: unknown) => Number(v ?? 0);
+
+    const [jobCounts] = (await db.execute(sql`
+      select
+        count(*) filter (where ${jobs.status} <> 'Completed') as open_jobs,
+        count(*) filter (where ${jobs.createdAt} >= now() - interval '7 days') as opened_this,
+        count(*) filter (where ${jobs.createdAt} >= now() - interval '14 days' and ${jobs.createdAt} < now() - interval '7 days') as opened_last,
+        count(*) filter (where ${jobs.completedAt} >= now() - interval '7 days') as completed_this,
+        count(*) filter (where ${jobs.completedAt} >= now() - interval '14 days' and ${jobs.completedAt} < now() - interval '7 days') as completed_last
+      from ${jobs} where ${jobs.companyId} = ${companyId}
+    `)).rows as any[];
+
+    const [assetCounts] = (await db.execute(sql`
+      select count(*) filter (where ${assets.status} in ('Down', 'Maintenance')) as down, count(*) as total
+      from ${assets} where ${assets.companyId} = ${companyId}
+    `)).rows as any[];
+
+    const [stockCounts] = (await db.execute(sql`
+      select count(*) filter (where ${inventory.stock} < ${inventory.minStock}) as low
+      from ${inventory} where ${inventory.companyId} = ${companyId}
+    `)).rows as any[];
+
+    const daily = (await db.execute(sql`
+      with days as (
+        select generate_series((now() at time zone 'Europe/London')::date - 6, (now() at time zone 'Europe/London')::date, interval '1 day')::date as day
+      )
+      select to_char(d.day, 'YYYY-MM-DD') as day,
+        (select count(*) from ${jobs} where ${jobs.companyId} = ${companyId} and (${jobs.createdAt} at time zone 'Europe/London')::date = d.day) as opened,
+        (select count(*) from ${jobs} where ${jobs.companyId} = ${companyId} and (${jobs.completedAt} at time zone 'Europe/London')::date = d.day) as completed
+      from days d order by d.day
+    `)).rows as any[];
+
+    const [mtbf] = (await db.execute(sql`
+      select percentile_cont(0.5) within group (order by gap_days) as median_days from (
+        select extract(epoch from (max(${jobs.createdAt}) - min(${jobs.createdAt}))) / 86400 / (count(*) - 1) as gap_days
+        from ${jobs}
+        where ${jobs.companyId} = ${companyId} and ${jobs.type} = 'Breakdown' and ${jobs.assetId} is not null
+        group by ${jobs.assetId} having count(*) >= 2
+      ) per_asset
+    `)).rows as any[];
+
+    const [mttr] = (await db.execute(sql`
+      select avg(extract(epoch from (${jobs.completedAt} - ${jobs.createdAt})) / 3600) as mean_hours
+      from ${jobs}
+      where ${jobs.companyId} = ${companyId} and ${jobs.type} = 'Breakdown'
+        and ${jobs.completedAt} >= now() - interval '90 days'
+    `)).rows as any[];
+
+    const stockValue = (await db.execute(sql`
+      select ${inventory.category} as category,
+        coalesce(sum(${inventory.stock} * ${inventory.unitCost}), 0) as value,
+        count(*) filter (where ${inventory.unitCost} is null) as uncosted
+      from ${inventory} where ${inventory.companyId} = ${companyId}
+      group by ${inventory.category} order by value desc
+    `)).rows as any[];
+
+    const top = (await db.execute(sql`
+      select ${jobs.assetId} as asset_id, max(${assets.name}) as name, count(*) as breakdowns
+      from ${jobs}
+      join ${assets} on ${assets.companyId} = ${jobs.companyId} and ${assets.id} = ${jobs.assetId}
+      where ${jobs.companyId} = ${companyId} and ${jobs.type} = 'Breakdown'
+        and ${jobs.createdAt} >= now() - interval '12 months'
+      group by ${jobs.assetId} order by breakdowns desc, asset_id limit 10
+    `)).rows as any[];
+
+    return {
+      openJobs: num(jobCounts?.open_jobs),
+      openedThisWeek: num(jobCounts?.opened_this),
+      openedLastWeek: num(jobCounts?.opened_last),
+      completedThisWeek: num(jobCounts?.completed_this),
+      completedLastWeek: num(jobCounts?.completed_last),
+      assetsDown: num(assetCounts?.down),
+      assetsTotal: num(assetCounts?.total),
+      lowStock: num(stockCounts?.low),
+      daily: daily.map((r) => ({ day: String(r.day), opened: num(r.opened), completed: num(r.completed) })),
+      mtbfDays: mtbf?.median_days == null ? null : Math.round(Number(mtbf.median_days) * 10) / 10,
+      mttrHours: mttr?.mean_hours == null ? null : Math.round(Number(mttr.mean_hours) * 10) / 10,
+      stockValueByCategory: stockValue.map((r) => ({ category: String(r.category), value: Math.round(Number(r.value) * 100) / 100, uncosted: num(r.uncosted) })),
+      topBreakdownAssets: top.map((r) => ({ assetId: String(r.asset_id), name: String(r.name), breakdowns: num(r.breakdowns) })),
+    };
   }
 
   async getTemplates(companyId: number): Promise<Template[]> {

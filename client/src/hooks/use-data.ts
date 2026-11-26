@@ -13,6 +13,18 @@ export function useLocations() {
   return useQuery({ queryKey: ["/api/locations"] });
 }
 
+export function useStoreRooms() {
+  return useQuery({ queryKey: ["/api/store-rooms"] });
+}
+
+export function useBins() {
+  return useQuery({ queryKey: ["/api/bins"] });
+}
+
+export function useDashboardSummary() {
+  return useQuery({ queryKey: ["/api/dashboard/summary"] });
+}
+
 export function useAssets() {
   return useQuery({ queryKey: ["/api/assets"] });
 }
@@ -61,6 +73,13 @@ export function useMaintenanceRequests() {
   return useQuery({ queryKey: ["/api/maintenance-requests"] });
 }
 
+/** Any write can change the dashboard figures, so they are always refreshed too. */
+function invalidateAfterWrite(keys: string[]) {
+  [...keys, "/api/dashboard/summary"].forEach(key => {
+    queryClient.invalidateQueries({ queryKey: [key] });
+  });
+}
+
 export function useCreateMutation(endpoint: string, invalidateKeys: string[]) {
   return useMutation({
     mutationFn: async (data: any) => {
@@ -68,9 +87,7 @@ export function useCreateMutation(endpoint: string, invalidateKeys: string[]) {
       return res.json();
     },
     onSuccess: () => {
-      invalidateKeys.forEach(key => {
-        queryClient.invalidateQueries({ queryKey: [key] });
-      });
+      invalidateAfterWrite(invalidateKeys);
     },
   });
 }
@@ -82,9 +99,7 @@ export function useUpdateMutation(endpoint: string, invalidateKeys: string[]) {
       return res.json();
     },
     onSuccess: () => {
-      invalidateKeys.forEach(key => {
-        queryClient.invalidateQueries({ queryKey: [key] });
-      });
+      invalidateAfterWrite(invalidateKeys);
     },
   });
 }
@@ -95,9 +110,7 @@ export function useDeleteMutation(endpoint: string, invalidateKeys: string[]) {
       await apiRequest("DELETE", `${endpoint}/${id}`);
     },
     onSuccess: () => {
-      invalidateKeys.forEach(key => {
-        queryClient.invalidateQueries({ queryKey: [key] });
-      });
+      invalidateAfterWrite(invalidateKeys);
     },
   });
 }

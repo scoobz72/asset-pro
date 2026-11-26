@@ -1,6 +1,6 @@
 import Layout from "@/components/Layout";
 import { useState } from "react";
-import { useInventory, useLocations } from "@/hooks/use-data";
+import { useInventory, useLocations, useBins, useStoreRooms } from "@/hooks/use-data";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -51,7 +51,21 @@ export default function StockTake() {
 
   const inventory = inventoryData as any[];
 
-  const inventoryLocations = Array.from(new Set(inventory.map((item: any) => item.location))).sort();
+  const { data: binsData = [] } = useBins();
+  const { data: storeRoomsData = [] } = useStoreRooms();
+  const bins = binsData as any[];
+  const storeRooms = storeRoomsData as any[];
+
+  /** Stock is counted by store room: the room that holds the part's bin. */
+  const NO_BIN = "No bin assigned";
+  const areaOf = (item: any): string => {
+    const bin = bins.find((b) => b.id === item.binId);
+    const room = bin && storeRooms.find((r) => r.id === bin.storeRoomId);
+    return room ? room.name : NO_BIN;
+  };
+
+  const inventoryLocations = Array.from(new Set(inventory.map(areaOf))).sort((a, b) =>
+    a === NO_BIN ? 1 : b === NO_BIN ? -1 : a.localeCompare(b));
 
   const handleLocationToggle = (loc: string) => {
     setSelectedLocations(prev => 
@@ -62,7 +76,7 @@ export default function StockTake() {
   };
 
   const filteredInventory = inventory.filter((item: any) => 
-    selectedLocations.includes(item.location) &&
+    selectedLocations.includes(areaOf(item)) &&
     (item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
      item.id.toLowerCase().includes(searchQuery.toLowerCase()))
   );
@@ -70,7 +84,7 @@ export default function StockTake() {
   const startStockTake = () => {
     if (selectedLocations.length === 0) {
       toast({
-        title: "No locations selected",
+        title: "No store rooms selected",
         description: "Please select at least one store room or bin to count.",
         variant: "destructive"
       });
@@ -223,7 +237,7 @@ export default function StockTake() {
             <CardHeader>
               <CardTitle className="flex items-center">
                 <ClipboardList className="mr-2 size-5 text-primary" />
-                Select Locations
+                Select Store Rooms
               </CardTitle>
               <CardDescription>
                 Choose the store rooms or bins you want to cycle check.
@@ -244,7 +258,7 @@ export default function StockTake() {
                     }}
                   />
                   <label htmlFor="select-all" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                    Select All Locations
+                    Select All Store Rooms
                   </label>
                 </div>
                 
@@ -260,7 +274,7 @@ export default function StockTake() {
                         <label htmlFor={`loc-${loc}`} className="text-sm font-medium leading-none cursor-pointer flex justify-between w-full">
                           <span>{loc}</span>
                           <Badge variant="secondary" className="text-xs">
-                            {inventory.filter((i: any) => i.location === loc).length} items
+                            {inventory.filter((i: any) => areaOf(i) === loc).length} items
                           </Badge>
                         </label>
                       </div>
@@ -294,7 +308,7 @@ export default function StockTake() {
               <div>
                 <CardTitle>Count Items</CardTitle>
                 <CardDescription className="flex items-center mt-1">
-                  Counting {filteredInventory.length} items across {selectedLocations.length} locations.
+                  Counting {filteredInventory.length} items across {selectedLocations.length} store room(s).
                 </CardDescription>
               </div>
               <div className="relative w-full md:w-64">
@@ -319,7 +333,7 @@ export default function StockTake() {
                 <TableRow>
                   <TableHead className="w-[100px] px-4">Part #</TableHead>
                   <TableHead>Item Name</TableHead>
-                  <TableHead>Location</TableHead>
+                  <TableHead>Bin</TableHead>
                   <TableHead className="text-right">System Stock</TableHead>
                   <TableHead className="w-[150px] text-right px-4">Actual Count</TableHead>
                   <TableHead className="w-[100px] text-center">Variance</TableHead>
@@ -330,7 +344,7 @@ export default function StockTake() {
                 {filteredInventory.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
-                      No items found for the selected locations.
+                      No items found for the selected store rooms.
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -345,7 +359,7 @@ export default function StockTake() {
                         <TableCell className="font-mono text-xs px-4">{item.id}</TableCell>
                         <TableCell className="font-medium">{item.name}</TableCell>
                         <TableCell>
-                          <Badge variant="outline" className="text-xs">{item.location}</Badge>
+                          <Badge variant="outline" className="text-xs">{item.binId ?? areaOf(item)}</Badge>
                         </TableCell>
                         <TableCell className="text-right text-muted-foreground">
                           {item.stock} {item.unit}

@@ -2,35 +2,22 @@ import Layout from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer,
-  LineChart,
-  Line
-} from "recharts";
-import { 
-  AlertTriangle, 
-  CheckCircle2, 
-  Clock, 
-  ArrowUpRight, 
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  ArrowUpRight,
   ArrowDownRight,
+  Minus,
   Package,
-  Activity,
-  Calendar as CalendarIcon,
   Wrench,
+  Timer,
   AlertOctagon,
   Mail,
   Send,
-  MessageSquare,
-  Sparkles,
-  Bot
 } from "lucide-react";
-import { useAssets, useJobs, useInventory } from "@/hooks/use-data";
+import { useAssets, useInventory, useDashboardSummary } from "@/hooks/use-data";
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -39,90 +26,67 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useState, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { format, subDays } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
-
 import { Link } from "wouter";
 
+type DashboardSummary = {
+  openJobs: number;
+  openedThisWeek: number;
+  openedLastWeek: number;
+  completedThisWeek: number;
+  completedLastWeek: number;
+  assetsDown: number;
+  assetsTotal: number;
+  lowStock: number;
+  daily: { day: string; opened: number; completed: number }[];
+  mtbfDays: number | null;
+  mttrHours: number | null;
+};
+
+type Stat = {
+  title: string;
+  value: string | number;
+  icon: typeof Clock;
+  color: string;
+  link: string;
+  /** Plain-English note under the figure. */
+  note: string;
+  /** Change vs the previous 7 days, when there is a real comparison. */
+  delta?: number;
+  /** Whether a rise is good news (green) or bad news (amber). */
+  riseIsGood?: boolean;
+};
+
+function Trend({ delta, riseIsGood }: { delta: number; riseIsGood: boolean }) {
+  if (delta === 0) return <Minus className="mr-1 size-3 text-muted-foreground" />;
+  const good = delta > 0 === riseIsGood;
+  const Icon = delta > 0 ? ArrowUpRight : ArrowDownRight;
+  return <Icon className={cn("mr-1 size-3", good ? "text-green-600" : "text-amber-600")} />;
+}
+
 export default function Dashboard() {
-  const [dateFilter, setDateFilter] = useState("7days");
   const [isEmailing, setIsEmailing] = useState(false);
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
-  const [aiQuery, setAiQuery] = useState("");
-  const [aiResponse, setAiResponse] = useState<string | null>(null);
-  const [isAsking, setIsAsking] = useState(false);
   const { toast } = useToast();
 
+  const { data: summaryData, isLoading: summaryLoading } = useDashboardSummary();
   const { data: assets = [], isLoading: assetsLoading } = useAssets();
-  const { data: jobs = [], isLoading: jobsLoading } = useJobs();
   const { data: inventoryItems = [], isLoading: inventoryLoading } = useInventory();
-
-  const isLoading = assetsLoading || jobsLoading || inventoryLoading;
-
-  const openJobsCount = useMemo(() => {
-    return (jobs as any[]).filter((j: any) => j.status !== "Completed").length;
-  }, [jobs]);
-
-  const assetsDownCount = useMemo(() => {
-    return (assets as any[]).filter((a: any) => a.status === "Down").length;
-  }, [assets]);
+  const summary = summaryData as DashboardSummary | undefined;
 
   const lowStockItems = useMemo(() => {
     return (inventoryItems as any[]).filter((i: any) => i.stock < i.minStock);
   }, [inventoryItems]);
 
-  const completedJobsCount = useMemo(() => {
-    return (jobs as any[]).filter((j: any) => j.status === "Completed").length;
-  }, [jobs]);
-
-  const completionRate = useMemo(() => {
-    const total = (jobs as any[]).length;
-    if (total === 0) return "0%";
-    return `${Math.round((completedJobsCount / total) * 100)}%`;
-  }, [jobs, completedJobsCount]);
-
   const criticalAssets = useMemo(() => {
     return (assets as any[]).filter((a: any) => a.status === "Down" || a.status === "Maintenance");
   }, [assets]);
 
-  const chartData = useMemo(() => {
-    const baseData = [
-      { completed: 4, opened: 6 },
-      { completed: 3, opened: 2 },
-      { completed: 7, opened: 5 },
-      { completed: 5, opened: 4 },
-      { completed: 8, opened: 3 },
-      { completed: 2, opened: 1 },
-      { completed: 1, opened: 0 },
-    ];
-    return baseData.map((data, i) => ({
-      name: format(subDays(new Date(), 6 - i), 'MMM dd'),
-      ...data
-    }));
-  }, []);
-
-  const handleAskAI = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!aiQuery.trim()) return;
-    
-    setIsAsking(true);
-    setAiResponse(null);
-    
-    setTimeout(() => {
-      setIsAsking(false);
-      
-      const query = aiQuery.toLowerCase();
-      if (query.includes("low stock") || query.includes("parts")) {
-        setAiResponse(`I found ${lowStockItems.length} parts currently below their minimum stock levels. Would you like me to draft a purchase order for these?`);
-      } else if (query.includes("asset") || query.includes("breakdown") || query.includes("broken")) {
-        const downAssets = (assets as any[]).filter((a: any) => a.status === "Down");
-        const downNames = downAssets.map((a: any) => a.name).join(", ") || "none";
-        setAiResponse(`Currently ${downAssets.length} asset(s) are marked as 'Down': ${downNames}. I recommend reviewing their recent maintenance history.`);
-      } else {
-        setAiResponse(`Based on our current data, overall completion rate is ${completionRate}. We have ${openJobsCount} open jobs, and ${assetsDownCount} critical asset(s) currently down. Is there a specific area you'd like me to analyze further?`);
-      }
-    }, 1500);
-  };
+  const chartData = useMemo(
+    () => (summary?.daily ?? []).map((d) => ({ name: format(parseISO(d.day), "EEE dd MMM"), opened: d.opened, completed: d.completed })),
+    [summary],
+  );
 
   const handleScheduleEmail = (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,53 +101,61 @@ export default function Dashboard() {
     }, 1000);
   };
 
-  const stats = [
-    { 
-      title: "Open Jobs", 
-      value: openJobsCount, 
-      change: "+2.5%", 
-      trend: "up",
+  const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
+  const stats: Stat[] = summary ? [
+    {
+      title: "Open Jobs",
+      value: summary.openJobs,
       icon: Clock,
       color: "text-blue-500",
-      link: "/jobs"
+      link: "/jobs",
+      delta: summary.openedThisWeek - summary.openedLastWeek,
+      riseIsGood: false,
+      note: `${summary.openedThisWeek} opened this week (${signed(summary.openedThisWeek - summary.openedLastWeek)} vs last)`,
     },
-    { 
-      title: "MTBF", 
-      value: "412 hrs", 
-      change: "+15 hrs", 
-      trend: "up",
-      icon: Wrench,
-      color: "text-indigo-500",
-      link: "/assets"
-    },
-    { 
-      title: "Critical Assets Down", 
-      value: assetsDownCount, 
-      change: "-1", 
-      trend: "down",
-      icon: AlertTriangle,
-      color: "text-destructive",
-      link: "/assets"
-    },
-    { 
-      title: "Low Stock Items", 
-      value: lowStockItems.length, 
-      change: "+2", 
-      trend: "up",
-      icon: Package,
-      color: "text-orange-500",
-      link: "/inventory"
-    },
-    { 
-      title: "Completion Rate", 
-      value: completionRate, 
-      change: "+1.2%", 
-      trend: "up",
+    {
+      title: "Completed (7 days)",
+      value: summary.completedThisWeek,
       icon: CheckCircle2,
       color: "text-green-500",
-      link: "/jobs"
+      link: "/jobs",
+      delta: summary.completedThisWeek - summary.completedLastWeek,
+      riseIsGood: true,
+      note: `${signed(summary.completedThisWeek - summary.completedLastWeek)} vs previous 7 days`,
     },
-  ];
+    {
+      title: "Assets Down",
+      value: summary.assetsDown,
+      icon: AlertTriangle,
+      color: "text-destructive",
+      link: "/assets",
+      note: `Down or in maintenance, of ${summary.assetsTotal} assets`,
+    },
+    {
+      title: "Low Stock Items",
+      value: summary.lowStock,
+      icon: Package,
+      color: "text-orange-500",
+      link: "/inventory",
+      note: "Below minimum stock",
+    },
+    {
+      title: "MTBF",
+      value: summary.mtbfDays == null ? "Not enough data" : `${summary.mtbfDays} days`,
+      icon: Wrench,
+      color: "text-indigo-500",
+      link: "/reports",
+      note: summary.mtbfDays == null ? "Needs 2+ breakdowns on an asset" : "Median time between breakdowns",
+    },
+    {
+      title: "MTTR",
+      value: summary.mttrHours == null ? "Not enough data" : `${summary.mttrHours} h`,
+      icon: Timer,
+      color: "text-teal-500",
+      link: "/reports",
+      note: summary.mttrHours == null ? "No breakdowns completed in 90 days" : "Mean time to repair, last 90 days",
+    },
+  ] : [];
 
   return (
     <Layout>
@@ -193,23 +165,6 @@ export default function Dashboard() {
           <p className="text-muted-foreground mt-1">Overview of maintenance operations.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 bg-background border rounded-md px-3 py-1 mr-2">
-            <CalendarIcon className="size-4 text-muted-foreground" />
-            <Select value={dateFilter} onValueChange={setDateFilter}>
-              <SelectTrigger className="w-[140px] border-0 h-8 focus:ring-0 px-1 shadow-none bg-transparent">
-                <SelectValue placeholder="Select period" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="today">Today</SelectItem>
-                <SelectItem value="yesterday">Yesterday</SelectItem>
-                <SelectItem value="7days">Last 7 Days</SelectItem>
-                <SelectItem value="30days">Last 30 Days</SelectItem>
-                <SelectItem value="thisMonth">This Month</SelectItem>
-                <SelectItem value="lastMonth">Last Month</SelectItem>
-                <SelectItem value="ytd">Year to Date</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
           <Dialog open={isEmailDialogOpen} onOpenChange={setIsEmailDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" className="gap-2">
@@ -273,13 +228,12 @@ export default function Dashboard() {
               </form>
             </DialogContent>
           </Dialog>
-          <Button variant="outline">Download PDF</Button>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5 mb-6">
-        {isLoading ? (
-          Array.from({ length: 5 }).map((_, i) => (
+      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6 mb-6">
+        {summaryLoading || !summary ? (
+          Array.from({ length: 6 }).map((_, i) => (
             <Card key={i} className="shadow-sm h-full">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <Skeleton className="h-4 w-20" />
@@ -292,8 +246,8 @@ export default function Dashboard() {
             </Card>
           ))
         ) : (
-          stats.map((stat, index) => (
-            <Link key={index} href={stat.link}>
+          stats.map((stat) => (
+            <Link key={stat.title} href={stat.link}>
               <Card className="shadow-sm hover:shadow-md transition-shadow cursor-pointer h-full">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium hover:text-primary transition-colors">
@@ -302,17 +256,12 @@ export default function Dashboard() {
                   <stat.icon className={cn("size-4", stat.color)} />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{stat.value}</div>
+                  <div className={cn("font-bold", typeof stat.value === "string" && stat.value.startsWith("Not") ? "text-base text-muted-foreground" : "text-2xl")}>
+                    {stat.value}
+                  </div>
                   <p className="text-xs text-muted-foreground flex items-center mt-1">
-                    {stat.trend === "up" ? (
-                      <ArrowUpRight className="mr-1 size-3 text-green-500" />
-                    ) : (
-                      <ArrowDownRight className="mr-1 size-3 text-red-500" />
-                    )}
-                    <span className={stat.trend === "up" ? "text-green-500" : "text-red-500"}>
-                      {stat.change}
-                    </span>
-                    <span className="ml-1">vs prev period</span>
+                    {stat.delta !== undefined && <Trend delta={stat.delta} riseIsGood={!!stat.riseIsGood} />}
+                    <span>{stat.note}</span>
                   </p>
                 </CardContent>
               </Card>
@@ -324,79 +273,31 @@ export default function Dashboard() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7 mb-6">
         <Card className="col-span-4 shadow-sm">
           <CardHeader>
-            <CardTitle>Job Completion Trend</CardTitle>
-            <CardDescription>Maintenance tasks over {dateFilter === "7days" ? "the last 7 days" : "the selected period"}.</CardDescription>
+            <CardTitle>Jobs Opened vs Completed</CardTitle>
+            <CardDescription>Last 7 days.</CardDescription>
           </CardHeader>
           <CardContent className="pl-2">
-            <ResponsiveContainer width="100%" height={350}>
-              <BarChart data={chartData}>
-                <XAxis 
-                  dataKey="name" 
-                  stroke="#888888" 
-                  fontSize={12} 
-                  tickLine={false} 
-                  axisLine={false} 
-                />
-                <YAxis 
-                  stroke="#888888" 
-                  fontSize={12} 
-                  tickLine={false} 
-                  axisLine={false} 
-                  tickFormatter={(value) => `${value}`} 
-                />
-                <Tooltip 
-                  cursor={{fill: 'transparent'}}
-                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                />
-                <Bar dataKey="opened" name="Opened" fill="hsl(var(--muted))" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="completed" name="Completed" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {summaryLoading ? (
+              <Skeleton className="h-[350px] w-full" />
+            ) : (
+              <ResponsiveContainer width="100%" height={350}>
+                <BarChart data={chartData}>
+                  <XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                  <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
+                  <Tooltip
+                    cursor={{ fill: "transparent" }}
+                    contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Bar dataKey="opened" name="Opened" fill="hsl(var(--muted-foreground))" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="completed" name="Completed" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
-        
+
         <div className="col-span-3 space-y-4">
-          <Card className="shadow-sm border-primary/20 bg-primary/5">
-            <CardHeader className="py-4 pb-2">
-              <CardTitle className="text-base flex items-center text-primary">
-                <Bot className="size-5 mr-2" />
-                Ask SmartAIss
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Ask questions about your assets, inventory, or operations.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pb-4 space-y-3">
-              <div className="flex flex-wrap gap-2 text-xs mb-2">
-                <Badge variant="secondary" className="cursor-pointer hover:bg-primary/20" onClick={() => setAiQuery("Show me parts with low stock")}>Low stock parts?</Badge>
-                <Badge variant="secondary" className="cursor-pointer hover:bg-primary/20" onClick={() => setAiQuery("Which assets broke down most this week?")}>Frequent breakdowns?</Badge>
-              </div>
-              
-              <form onSubmit={handleAskAI} className="flex gap-2">
-                <Input 
-                  placeholder="Ask a question..." 
-                  className="h-9 bg-background" 
-                  value={aiQuery}
-                  onChange={(e) => setAiQuery(e.target.value)}
-                />
-                <Button type="submit" size="sm" className="h-9 px-3" disabled={isAsking || !aiQuery.trim()}>
-                  {isAsking ? <Activity className="size-4 animate-pulse" /> : <Sparkles className="size-4" />}
-                </Button>
-              </form>
-
-              {aiResponse && (
-                <div className="mt-3 p-3 bg-background rounded-md text-sm border shadow-sm animate-in fade-in slide-in-from-bottom-2 flex items-start gap-3">
-                  <div className="p-1.5 bg-primary/10 text-primary rounded-full shrink-0 mt-0.5">
-                    <Sparkles className="size-3" />
-                  </div>
-                  <p className="text-muted-foreground leading-relaxed">
-                    {aiResponse}
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
           <Card className="shadow-sm">
             <CardHeader className="py-4 flex flex-row items-center justify-between">
               <CardTitle className="text-base flex items-center">

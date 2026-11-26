@@ -1,5 +1,6 @@
 import Layout from "@/components/Layout";
-import { useInventory, useSuppliers, useAssets, useTransactions, useCreateMutation, useUpdateMutation, useDeleteMutation } from "@/hooks/use-data";
+import { useInventory, useSuppliers, useAssets, useTransactions, useBins, useStoreRooms, useCreateMutation, useUpdateMutation, useDeleteMutation } from "@/hooks/use-data";
+import { PART_UNITS } from "@shared/constants";
 import { 
   Table, 
   TableBody, 
@@ -53,7 +54,9 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -62,13 +65,17 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
 import { useMutation } from "@tanstack/react-query";
-import type { InventoryItem, Supplier, Asset, StockTransaction } from "@shared/schema";
+import type { InventoryItem, Supplier, Asset, StockTransaction, Bin, StoreRoom } from "@shared/schema";
 
 export default function Inventory() {
   const { data: inventoryData = [], isLoading: inventoryLoading } = useInventory();
   const { data: suppliersData = [] } = useSuppliers();
   const { data: assetsData = [] } = useAssets();
   const { data: transactionsData = [] } = useTransactions();
+  const { data: binsData = [] } = useBins();
+  const { data: storeRoomsData = [] } = useStoreRooms();
+  const binsList = binsData as Bin[];
+  const storeRoomsList = storeRoomsData as StoreRoom[];
 
   const inventoryItems = inventoryData as InventoryItem[];
   const suppliersList = suppliersData as Supplier[];
@@ -90,7 +97,10 @@ export default function Inventory() {
     stock: 0,
     minStock: 0,
     unit: "pcs",
-    location: "",
+    binId: "",
+    unitCost: "",
+    reorderQty: "",
+    manufacturerPartNo: "",
     leadTime: 1,
     primarySupplierId: "",
     secondarySupplierId: "",
@@ -101,7 +111,10 @@ export default function Inventory() {
     category: "",
     minStock: 0,
     unit: "pcs",
-    location: "",
+    binId: "",
+    unitCost: "",
+    reorderQty: "",
+    manufacturerPartNo: "",
     leadTime: 1,
     primarySupplierId: "",
     secondarySupplierId: "",
@@ -148,6 +161,18 @@ export default function Inventory() {
     },
   });
 
+  const binLabel = (binId: string | null) => {
+    if (!binId) return <span className="text-muted-foreground">—</span>;
+    const bin = binsList.find(b => b.id === binId);
+    const room = bin && storeRoomsList.find(r => r.id === bin.storeRoomId);
+    return (
+      <div>
+        <div className="font-mono text-xs">{binId}</div>
+        {room && <div className="text-xs text-muted-foreground">{room.name}</div>}
+      </div>
+    );
+  };
+
   const filteredInventory = inventoryItems
     .filter(i => !filterLowStock || i.stock < i.minStock)
     .filter(i => {
@@ -164,10 +189,10 @@ export default function Inventory() {
       toast({ title: "Please fill in required fields", variant: "destructive" });
       return;
     }
-    createMutation.mutate(newItem as any, {
+    createMutation.mutate(cleanPart(newItem) as any, {
       onSuccess: () => {
         setAddDialogOpen(false);
-        setNewItem({ id: "", name: "", category: "", stock: 0, minStock: 0, unit: "pcs", location: "", leadTime: 1, primarySupplierId: "", secondarySupplierId: "" });
+        setNewItem({ id: "", name: "", category: "", stock: 0, minStock: 0, unit: "pcs", binId: "", unitCost: "", reorderQty: "", manufacturerPartNo: "", leadTime: 1, primarySupplierId: "", secondarySupplierId: "" });
         toast({ title: "Item added successfully" });
       },
       onError: (err: Error) => {
@@ -178,7 +203,7 @@ export default function Inventory() {
 
   const handleEditItem = () => {
     if (!selectedItem) return;
-    updateMutation.mutate({ id: selectedItem.id, data: editItem } as any, {
+    updateMutation.mutate({ id: selectedItem.id, data: cleanPart(editItem) } as any, {
       onSuccess: () => {
         setEditDialogOpen(false);
         setSelectedItem(null);
@@ -208,7 +233,10 @@ export default function Inventory() {
       category: item.category,
       minStock: item.minStock,
       unit: item.unit,
-      location: item.location || "",
+      binId: item.binId || "",
+      unitCost: item.unitCost ?? "",
+      reorderQty: item.reorderQty == null ? "" : String(item.reorderQty),
+      manufacturerPartNo: item.manufacturerPartNo || "",
       leadTime: item.leadTime || 1,
       primarySupplierId: item.primarySupplierId || "",
       secondarySupplierId: item.secondarySupplierId || "",
@@ -280,7 +308,7 @@ export default function Inventory() {
                   </div>
                   <div className="space-y-2">
                     <Label>Unit</Label>
-                    <Input data-testid="input-new-item-unit" value={newItem.unit} onChange={e => setNewItem({...newItem, unit: e.target.value})} placeholder="pcs" />
+                    <UnitSelect value={newItem.unit} onChange={v => setNewItem({...newItem, unit: v})} testId="input-new-item-unit" />
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-4">
@@ -297,25 +325,24 @@ export default function Inventory() {
                     <Input data-testid="input-new-item-lead-time" type="number" value={newItem.leadTime} onChange={e => setNewItem({...newItem, leadTime: parseInt(e.target.value) || 1})} />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Storage Location</Label>
-                  <Input data-testid="input-new-item-location" value={newItem.location} onChange={e => setNewItem({...newItem, location: e.target.value})} placeholder="Shelf A1" />
-                </div>
+                <PartExtraFields value={newItem} onChange={setNewItem} prefix="input-new-item" bins={binsList} storeRooms={storeRoomsList} />
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Primary Supplier</Label>
-                    <Select value={newItem.primarySupplierId} onValueChange={v => setNewItem({...newItem, primarySupplierId: v})}>
+                    <Select value={newItem.primarySupplierId || NONE} onValueChange={v => setNewItem({...newItem, primarySupplierId: v === NONE ? "" : v})}>
                       <SelectTrigger data-testid="select-new-item-primary-supplier"><SelectValue placeholder="Select supplier" /></SelectTrigger>
                       <SelectContent>
+                        <SelectItem value={NONE}>None</SelectItem>
                         {suppliersList.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
                     <Label>Secondary Supplier</Label>
-                    <Select value={newItem.secondarySupplierId} onValueChange={v => setNewItem({...newItem, secondarySupplierId: v})}>
+                    <Select value={newItem.secondarySupplierId || NONE} onValueChange={v => setNewItem({...newItem, secondarySupplierId: v === NONE ? "" : v})}>
                       <SelectTrigger data-testid="select-new-item-secondary-supplier"><SelectValue placeholder="Select supplier" /></SelectTrigger>
                       <SelectContent>
+                        <SelectItem value={NONE}>None</SelectItem>
                         {suppliersList.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
@@ -397,7 +424,7 @@ export default function Inventory() {
               <TableHead className="w-[100px]">Part #</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Category</TableHead>
-              <TableHead>Location</TableHead>
+              <TableHead>Bin</TableHead>
               <TableHead>Stock Level</TableHead>
               <TableHead>Criticality</TableHead>
               <TableHead>Suppliers</TableHead>
@@ -434,7 +461,7 @@ export default function Inventory() {
                   </TableCell>
                   <TableCell className="font-medium">{item.name}</TableCell>
                   <TableCell>{item.category}</TableCell>
-                  <TableCell>{item.location}</TableCell>
+                  <TableCell>{binLabel(item.binId)}</TableCell>
                   <TableCell className="w-[180px]">
                     <div className="space-y-1">
                       <div className="flex justify-between text-xs">
@@ -628,32 +655,31 @@ export default function Inventory() {
               </div>
               <div className="space-y-2">
                 <Label>Unit</Label>
-                <Input data-testid="input-edit-item-unit" value={editItem.unit} onChange={e => setEditItem({...editItem, unit: e.target.value})} />
+                <UnitSelect value={editItem.unit} onChange={v => setEditItem({...editItem, unit: v})} testId="input-edit-item-unit" />
               </div>
               <div className="space-y-2">
                 <Label>Lead Time (days)</Label>
                 <Input data-testid="input-edit-item-lead-time" type="number" value={editItem.leadTime} onChange={e => setEditItem({...editItem, leadTime: parseInt(e.target.value) || 1})} />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>Storage Location</Label>
-              <Input data-testid="input-edit-item-location" value={editItem.location} onChange={e => setEditItem({...editItem, location: e.target.value})} />
-            </div>
+            <PartExtraFields value={editItem} onChange={setEditItem} prefix="input-edit-item" bins={binsList} storeRooms={storeRoomsList} />
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Primary Supplier</Label>
-                <Select value={editItem.primarySupplierId} onValueChange={v => setEditItem({...editItem, primarySupplierId: v})}>
+                <Select value={editItem.primarySupplierId || NONE} onValueChange={v => setEditItem({...editItem, primarySupplierId: v === NONE ? "" : v})}>
                   <SelectTrigger data-testid="select-edit-item-primary-supplier"><SelectValue placeholder="Select supplier" /></SelectTrigger>
                   <SelectContent>
+                    <SelectItem value={NONE}>None</SelectItem>
                     {suppliersList.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label>Secondary Supplier</Label>
-                <Select value={editItem.secondarySupplierId} onValueChange={v => setEditItem({...editItem, secondarySupplierId: v})}>
+                <Select value={editItem.secondarySupplierId || NONE} onValueChange={v => setEditItem({...editItem, secondarySupplierId: v === NONE ? "" : v})}>
                   <SelectTrigger data-testid="select-edit-item-secondary-supplier"><SelectValue placeholder="Select supplier" /></SelectTrigger>
                   <SelectContent>
+                    <SelectItem value={NONE}>None</SelectItem>
                     {suppliersList.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
@@ -753,23 +779,93 @@ function UsedOnAssetsCell({ itemId, assetsList }: { itemId: string; assetsList: 
 
 import { useQuery } from "@tanstack/react-query";
 
+/** Assets that list this part as a spare. One request for the whole company, shared by every row. */
 function useAllAssetParts(assetsList: Asset[], partId: string) {
-  return useQuery({
-    queryKey: ["/api/asset-parts-for-part", partId],
-    queryFn: async () => {
-      const results: Asset[] = [];
-      for (const asset of assetsList) {
-        const res = await fetch(`/api/assets/${asset.id}/parts`);
-        if (res.ok) {
-          const parts: string[] = await res.json();
-          if (parts.includes(partId)) {
-            results.push(asset);
-          }
-        }
-      }
-      return results;
-    },
-    enabled: assetsList.length > 0,
+  const { data: links = [], ...rest } = useQuery<{ assetId: string; partId: string; quantity: number }[]>({
+    queryKey: ["/api/asset-parts"],
     staleTime: 60000,
   });
+  const assetIds = new Set(links.filter(l => l.partId === partId).map(l => l.assetId));
+  return { ...rest, data: assetsList.filter(a => assetIds.has(a.id)) };
+}
+
+const NONE = "__none__";
+
+type PartForm = {
+  binId: string; unitCost: string; reorderQty: string; manufacturerPartNo: string;
+  primarySupplierId: string; secondarySupplierId: string; [key: string]: any;
+};
+
+/** Turns form strings into what the API expects: blanks become null, numbers become numbers. */
+function cleanPart<T extends PartForm>(form: T) {
+  const blank = (v: string) => (v ?? "").toString().trim() === "";
+  return {
+    ...form,
+    binId: blank(form.binId) ? null : form.binId,
+    primarySupplierId: blank(form.primarySupplierId) ? null : form.primarySupplierId,
+    secondarySupplierId: blank(form.secondarySupplierId) ? null : form.secondarySupplierId,
+    manufacturerPartNo: blank(form.manufacturerPartNo) ? null : form.manufacturerPartNo.trim(),
+    unitCost: blank(form.unitCost) ? null : String(form.unitCost).replace(/[£,\s]/g, ""),
+    reorderQty: blank(form.reorderQty) ? null : Math.max(0, parseInt(form.reorderQty, 10) || 0),
+  };
+}
+
+function UnitSelect({ value, onChange, testId }: { value: string; onChange: (v: string) => void; testId: string }) {
+  const units: string[] = (PART_UNITS as readonly string[]).includes(value) ? [...PART_UNITS] : [value, ...PART_UNITS];
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger data-testid={testId}><SelectValue /></SelectTrigger>
+      <SelectContent>
+        {units.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+      </SelectContent>
+    </Select>
+  );
+}
+
+/** Bin, cost, reorder quantity and manufacturer part number, shared by the add and edit dialogs. */
+function PartExtraFields<T extends PartForm>({ value, onChange, prefix, bins, storeRooms }: {
+  value: T; onChange: (next: T) => void; prefix: string; bins: Bin[]; storeRooms: StoreRoom[];
+}) {
+  return (
+    <>
+      <div className="space-y-2">
+        <Label>Bin</Label>
+        <Select value={value.binId || NONE} onValueChange={v => onChange({ ...value, binId: v === NONE ? "" : v })}>
+          <SelectTrigger data-testid={`${prefix}-bin`}><SelectValue placeholder="Select bin" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NONE}>No bin</SelectItem>
+            {storeRooms.map(room => {
+              const roomBins = bins.filter(b => b.storeRoomId === room.id);
+              if (roomBins.length === 0) return null;
+              return (
+                <SelectGroup key={room.id}>
+                  <SelectLabel>{room.name}</SelectLabel>
+                  {roomBins.map(b => (
+                    <SelectItem key={b.id} value={b.id}>{b.id}{b.description ? ` – ${b.description}` : ""}</SelectItem>
+                  ))}
+                </SelectGroup>
+              );
+            })}
+          </SelectContent>
+        </Select>
+        {bins.length === 0 && (
+          <p className="text-xs text-muted-foreground">Add store rooms and bins on the Locations page.</p>
+        )}
+      </div>
+      <div className="grid grid-cols-3 gap-4">
+        <div className="space-y-2">
+          <Label>Unit Cost (£)</Label>
+          <Input data-testid={`${prefix}-unit-cost`} inputMode="decimal" value={value.unitCost} onChange={e => onChange({ ...value, unitCost: e.target.value })} placeholder="0.00" />
+        </div>
+        <div className="space-y-2">
+          <Label>Reorder Qty</Label>
+          <Input data-testid={`${prefix}-reorder-qty`} type="number" min={0} value={value.reorderQty} onChange={e => onChange({ ...value, reorderQty: e.target.value })} />
+        </div>
+        <div className="space-y-2">
+          <Label>Mfr Part No</Label>
+          <Input data-testid={`${prefix}-mpn`} value={value.manufacturerPartNo} onChange={e => onChange({ ...value, manufacturerPartNo: e.target.value })} />
+        </div>
+      </div>
+    </>
+  );
 }

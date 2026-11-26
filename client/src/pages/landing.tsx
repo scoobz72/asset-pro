@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Wrench, ShieldCheck, Factory, CheckCircle2, ArrowRight, Send } from "lucide-react";
+import { LogoFull } from "@/components/Logo";
+import { ShieldCheck, Factory, CheckCircle2, ArrowRight, Send } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
@@ -89,12 +90,9 @@ export default function Landing() {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <header className="px-6 lg:px-14 h-20 flex items-center justify-between border-b bg-background/80 backdrop-blur-md sticky top-0 z-50">
-        <div className="flex items-center gap-3">
-          <div className="size-10 rounded-xl bg-primary flex items-center justify-center shadow-sm">
-             <Wrench className="size-5 text-primary-foreground" />
-          </div>
-          <span className="text-xl font-bold tracking-tight">ProMaintain</span>
-        </div>
+        <a href="/" className="flex items-center" aria-label="myCMMS home">
+          <LogoFull className="text-2xl md:text-3xl" />
+        </a>
         <nav className="hidden md:flex gap-6 text-sm font-medium text-muted-foreground">
           <a href="#features" className="hover:text-foreground transition-colors">Features</a>
           <a href="#request-access" className="hover:text-foreground transition-colors">Request access</a>
@@ -184,7 +182,11 @@ export default function Landing() {
       </main>
 
       <footer className="py-10 px-6 lg:px-14 border-t text-center text-muted-foreground text-sm">
-        <p>© {new Date().getFullYear()} ProMaintain</p>
+        <div className="flex flex-col items-center gap-3">
+          <LogoFull className="text-xl" />
+          <p className="tracking-[0.3em] text-xs font-semibold uppercase">Maintenance · Assets · PPM</p>
+          <p>© {new Date().getFullYear()} myCMMS.co.uk</p>
+        </div>
       </footer>
     </div>
   );

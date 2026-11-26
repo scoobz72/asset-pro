@@ -105,6 +105,22 @@ Sign in and check it works, then stop the Replit deployment.
 cd ~/assetpro && bash deploy/deploy.sh
 ```
 
+### First update after the Nov 2026 data-model change
+
+`deploy.sh` first runs `deploy/pre-push.sql`. It copies supplier contacts and lead times
+into the new columns, and clears empty supplier links. Then `drizzle-kit push` asks about
+these changes; the expected answers are:
+
+- **Drop `suppliers.contact`, `suppliers.lead_time` and `inventory.location`:** yes. Their
+  contents have already been copied, except part locations, which are replaced by bins.
+- **Add the unique constraint on `asset_parts` / "truncate the table?":** choose *No, add
+  the constraint without truncating*. The pre-push script has already removed duplicates.
+- **Rename a column** (for example `lead_time` to `lead_time_days`): choose **create
+  column**, not rename. The data has already been copied.
+
+After this deploy, give parts their bins on the Locations page (store rooms and bins), or
+through the Excel import once it is built.
+
 ## Backups
 
 Add to `crontab -e`:

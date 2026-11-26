@@ -57,6 +57,8 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useState } from "react";
+import { ASSET_STATUSES, CRITICALITIES } from "@shared/constants";
+import { useCurrentUser } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { Label } from "@/components/ui/label";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -88,10 +90,10 @@ function AssetPartsInfo({ assetId, inventoryData }: { assetId: string; inventory
                 const part = inventoryData?.find((p: any) => p.id === ap.partId);
                 const isLow = part && part.stock < part.minStock;
                 return (
-                  <div key={ap.id} className="flex justify-between items-center py-2 border-b last:border-0">
+                  <div key={ap.partId} className="flex justify-between items-center py-2 border-b last:border-0">
                     <div>
                       <div className="font-medium">{part?.name || ap.partId}</div>
-                      <div className="text-xs text-muted-foreground">{ap.partId}</div>
+                      <div className="text-xs text-muted-foreground">{ap.partId}{ap.quantity > 1 ? ` · ${ap.quantity} fitted` : ""}</div>
                     </div>
                     <div className="text-right">
                       <div className={cn("text-xs font-medium", isLow ? "text-red-500" : "text-green-600")}>
@@ -110,6 +112,77 @@ function AssetPartsInfo({ assetId, inventoryData }: { assetId: string; inventory
   );
 }
 
+const OPTIONAL_ASSET_FIELDS = ["category", "manufacturer", "model", "serialNumber", "criticality", "installDate", "parentAssetId", "locationId"] as const;
+
+/** Blank optional fields are sent as null, so the server never sees "" for a date or a link. */
+function cleanAsset<T extends Record<string, any>>(asset: T): T {
+  const out: Record<string, any> = { ...asset };
+  for (const key of OPTIONAL_ASSET_FIELDS) {
+    if (typeof out[key] === "string" && out[key].trim() === "") out[key] = null;
+  }
+  return out as T;
+}
+
+const NONE = "__none__";
+
+/** Fields added for the real data model: make, model, criticality, parent asset. */
+function AssetDetailFields({ value, onChange, assets, prefix }: {
+  value: any;
+  onChange: (next: any) => void;
+  assets: any[];
+  prefix: string;
+}) {
+  const set = (key: string, v: any) => onChange({ ...value, [key]: v });
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Category</Label>
+          <Input data-testid={`${prefix}-category`} placeholder="e.g. Conveyor" value={value.category ?? ""} onChange={(e) => set("category", e.target.value)} />
+        </div>
+        <div className="space-y-2">
+          <Label>Criticality</Label>
+          <Select value={value.criticality ?? NONE} onValueChange={(v) => set("criticality", v === NONE ? null : v)}>
+            <SelectTrigger data-testid={`${prefix}-criticality`}><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NONE}>Not set</SelectItem>
+              {CRITICALITIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>Manufacturer</Label>
+          <Input data-testid={`${prefix}-manufacturer`} value={value.manufacturer ?? ""} onChange={(e) => set("manufacturer", e.target.value)} />
+        </div>
+        <div className="space-y-2">
+          <Label>Model</Label>
+          <Input data-testid={`${prefix}-model`} value={value.model ?? ""} onChange={(e) => set("model", e.target.value)} />
+        </div>
+        <div className="space-y-2">
+          <Label>Serial number</Label>
+          <Input data-testid={`${prefix}-serial`} value={value.serialNumber ?? ""} onChange={(e) => set("serialNumber", e.target.value)} />
+        </div>
+        <div className="space-y-2">
+          <Label>Install date</Label>
+          <Input data-testid={`${prefix}-install-date`} type="date" value={value.installDate ?? ""} onChange={(e) => set("installDate", e.target.value)} />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label>Parent asset</Label>
+        <Select value={value.parentAssetId ?? NONE} onValueChange={(v) => set("parentAssetId", v === NONE ? null : v)}>
+          <SelectTrigger data-testid={`${prefix}-parent`}><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NONE}>None</SelectItem>
+            {assets.filter((a) => a.id !== value.id).map((a) => (
+              <SelectItem key={a.id} value={a.id}>{a.name} ({a.id})</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </>
+  );
+}
+
 export default function Assets() {
   const { data: assets = [], isLoading: assetsLoading } = useAssets();
   const { data: locationsData = [] } = useLocations();
@@ -121,7 +194,9 @@ export default function Assets() {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<any>(null);
-  const [newAsset, setNewAsset] = useState({ id: "", name: "", locationId: "", status: "Operational", health: 100 });
+  const emptyAsset = { id: "", name: "", locationId: "", status: "Operational", health: 100, category: "", manufacturer: "", model: "", serialNumber: "", criticality: null as string | null, installDate: "", parentAssetId: null as string | null };
+  const [newAsset, setNewAsset] = useState(emptyAsset);
+  const { data: currentUser } = useCurrentUser();
   const { toast } = useToast();
 
   const getLocationName = (locationId: string | null) => {
@@ -138,7 +213,7 @@ export default function Assets() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/assets"] });
       setAddDialogOpen(false);
-      setNewAsset({ id: "", name: "", locationId: "", status: "Operational", health: 100 });
+      setNewAsset(emptyAsset);
       toast({ title: "Asset Created", description: "The new asset has been added successfully." });
     },
     onError: (error: any) => {
@@ -184,12 +259,12 @@ export default function Assets() {
       toast({ title: "Validation Error", description: "ID and Name are required.", variant: "destructive" });
       return;
     }
-    createAssetMutation.mutate(newAsset);
+    createAssetMutation.mutate(cleanAsset(newAsset));
   };
 
   const handleEditAsset = () => {
     if (!editingAsset) return;
-    const { id, ...data } = editingAsset;
+    const { id, ...data } = cleanAsset(editingAsset);
     updateAssetMutation.mutate({ id, data });
   };
 
@@ -229,7 +304,7 @@ export default function Assets() {
                 Add Asset
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Add New Asset</DialogTitle>
                 <DialogDescription>Create a new asset in the system.</DialogDescription>
@@ -272,11 +347,7 @@ export default function Assets() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Operational">Operational</SelectItem>
-                      <SelectItem value="Maintenance">Maintenance</SelectItem>
-                      <SelectItem value="Down">Down</SelectItem>
-                      <SelectItem value="Loaned Out">Loaned Out</SelectItem>
-                      <SelectItem value="In Storage">In Storage</SelectItem>
+                      {ASSET_STATUSES.map((st) => <SelectItem key={st} value={st}>{st}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -284,6 +355,7 @@ export default function Assets() {
                   <Label>Health (%)</Label>
                   <Input data-testid="input-asset-health" type="number" min={0} max={100} value={newAsset.health} onChange={(e) => setNewAsset({ ...newAsset, health: parseInt(e.target.value) || 0 })} />
                 </div>
+                <AssetDetailFields value={newAsset} onChange={setNewAsset} assets={assets as any[]} prefix="input-asset" />
               </div>
               <DialogFooter>
                 <Button data-testid="button-submit-asset" onClick={handleCreateAsset} disabled={createAssetMutation.isPending}>
@@ -298,7 +370,7 @@ export default function Assets() {
 
       {editingAsset && (
         <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-          <DialogContent className="sm:max-w-[425px]">
+          <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Edit Asset</DialogTitle>
               <DialogDescription>Update asset details.</DialogDescription>
@@ -337,11 +409,7 @@ export default function Assets() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Operational">Operational</SelectItem>
-                    <SelectItem value="Maintenance">Maintenance</SelectItem>
-                    <SelectItem value="Down">Down</SelectItem>
-                    <SelectItem value="Loaned Out">Loaned Out</SelectItem>
-                    <SelectItem value="In Storage">In Storage</SelectItem>
+                    {ASSET_STATUSES.map((st) => <SelectItem key={st} value={st}>{st}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -349,6 +417,7 @@ export default function Assets() {
                 <Label>Health (%)</Label>
                 <Input data-testid="input-edit-asset-health" type="number" min={0} max={100} value={editingAsset.health} onChange={(e) => setEditingAsset({ ...editingAsset, health: parseInt(e.target.value) || 0 })} />
               </div>
+              <AssetDetailFields value={editingAsset} onChange={setEditingAsset} assets={assets as any[]} prefix="input-edit-asset" />
             </div>
             <DialogFooter>
               <Button data-testid="button-save-asset" onClick={handleEditAsset} disabled={updateAssetMutation.isPending}>
@@ -404,7 +473,15 @@ export default function Assets() {
                       <Badge variant="outline" className="font-mono text-xs font-normal" data-testid={`text-asset-id-${asset.id}`}>
                         {asset.id}
                       </Badge>
+                      {asset.criticality && (
+                        <Badge variant="secondary" className="text-xs" title="Criticality">Crit. {asset.criticality}</Badge>
+                      )}
                     </div>
+                    {(asset.category || asset.manufacturer || asset.model) && (
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {[asset.category, [asset.manufacturer, asset.model].filter(Boolean).join(" ")].filter(Boolean).join(" · ")}
+                      </p>
+                    )}
                     <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
                        <MapPin className="size-4 opacity-70" />
                        <span className="font-medium text-foreground" data-testid={`text-asset-location-${asset.id}`}>{getLocationName(asset.locationId)}</span>
@@ -551,7 +628,7 @@ export default function Assets() {
                   <div className="p-2 bg-primary/10 rounded-md">
                     <Building2 className="size-6" />
                   </div>
-                  ProMaintain Systems (Demo Workspace)
+                  {currentUser?.companyName ?? "Your company"}
                 </div>
                 
                 <div className="pl-8 space-y-10 border-l-2 ml-3 border-primary/20 py-2">
