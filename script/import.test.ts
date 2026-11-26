@@ -63,7 +63,7 @@ test("re-importing the same data changes nothing", async () => {
     if (!existing.spares.has(a)) existing.spares.set(a, new Map());
     existing.spares.get(a)!.set(String(r.values.partId), Number(r.values.quantity ?? 1));
   }
-  for (const [i, r] of (parsed.tabs.users ?? []).entries()) {
+  for (const [i, r] of Array.from((parsed.tabs.users ?? []).entries())) {
     existing.users.push({ id: 100 + i, name: String(r.values.name), email: String(r.values.email), role: String(r.values.role) });
   }
   const plan = buildPlan(parsed, existing, IMPORTER);

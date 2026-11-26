@@ -3,7 +3,8 @@
  * Nothing here touches the database.
  */
 import ExcelJS from "exceljs";
-import { Readable } from "node:stream";
+import zlib from "node:zlib";
+import { describeErrorForLog } from "../errors";
 import { z } from "zod";
 import {
   TABS, type TabKey, type TabSpec, type ColumnSpec,
@@ -44,58 +45,103 @@ const ZIP_MAGIC = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
 const MAX_UNCOMPRESSED_TOTAL = 150 * 1024 * 1024;
 const MAX_UNCOMPRESSED_ENTRY = 100 * 1024 * 1024;
 
+interface ZipEntry { name: string; method: number; compressedSize: number; localOffset: number }
+
 /**
  * Checks the zip's central directory: every entry's declared uncompressed size must be
  * within limits. ZIP64 archives (sizes above 4 GB) are rejected outright.
+ * Returns the entries so the worksheets can be row-counted without loading the workbook.
  */
-export function checkZipContainer(buf: Buffer): void {
+export function checkZipContainer(buf: Buffer): ZipEntry[] {
   if (buf.length > MAX_FILE_BYTES) throw new ImportFileError("The file is larger than 5 MB.");
   if (buf.length < 22 || !buf.subarray(0, 4).equals(ZIP_MAGIC)) {
     throw new ImportFileError("This isn't an Excel .xlsx file. Save it as \"Excel Workbook (.xlsx)\" and try again (.xls and .csv aren't supported).");
   }
+  const damaged = () => new ImportFileError("The file is damaged or isn't a valid .xlsx workbook.");
+  const tooLarge = () => new ImportFileError("The workbook is too large to import.");
   // End of central directory: signature 0x06054b50 within the last 64 KB + 22 bytes.
   let eocd = -1;
   for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65557); i--) {
     if (buf.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }
   }
-  if (eocd < 0) throw new ImportFileError("The file is damaged or isn't a valid .xlsx workbook.");
-  const entries = buf.readUInt16LE(eocd + 10);
+  if (eocd < 0) throw damaged();
+  const count = buf.readUInt16LE(eocd + 10);
   let offset = buf.readUInt32LE(eocd + 16);
-  if (entries === 0xffff || offset === 0xffffffff) throw new ImportFileError("The workbook is too large to import.");
+  if (count === 0xffff || offset === 0xffffffff) throw tooLarge();
+  const entries: ZipEntry[] = [];
   let total = 0;
-  for (let n = 0; n < entries; n++) {
-    if (offset + 46 > buf.length || buf.readUInt32LE(offset) !== 0x02014b50) {
-      throw new ImportFileError("The file is damaged or isn't a valid .xlsx workbook.");
-    }
+  for (let n = 0; n < count; n++) {
+    if (offset + 46 > buf.length || buf.readUInt32LE(offset) !== 0x02014b50) throw damaged();
+    const method = buf.readUInt16LE(offset + 10);
+    const compressedSize = buf.readUInt32LE(offset + 20);
     const size = buf.readUInt32LE(offset + 24);
-    if (size === 0xffffffff || size > MAX_UNCOMPRESSED_ENTRY) throw new ImportFileError("The workbook is too large to import.");
+    const nameLength = buf.readUInt16LE(offset + 28);
+    const localOffset = buf.readUInt32LE(offset + 42);
+    if (size === 0xffffffff || compressedSize === 0xffffffff || size > MAX_UNCOMPRESSED_ENTRY) throw tooLarge();
     total += size;
-    if (total > MAX_UNCOMPRESSED_TOTAL) throw new ImportFileError("The workbook is too large to import.");
-    offset += 46 + buf.readUInt16LE(offset + 28) + buf.readUInt16LE(offset + 30) + buf.readUInt16LE(offset + 32);
+    if (total > MAX_UNCOMPRESSED_TOTAL) throw tooLarge();
+    const name = buf.toString("utf8", offset + 46, offset + 46 + nameLength);
+    entries.push({ name, method, compressedSize, localOffset });
+    offset += 46 + nameLength + buf.readUInt16LE(offset + 30) + buf.readUInt16LE(offset + 32);
   }
+  return entries;
 }
 
 /**
- * Counts rows with the streaming reader, so an oversized sheet is rejected before the
- * whole workbook is loaded into memory. Allows for the header and notes rows.
+ * Counts <row> elements in one worksheet by streaming its decompressed XML, so an
+ * oversized sheet (or a zip bomb) is stopped early without building the workbook.
+ * Also enforces the real decompressed size, not just the size the zip declares.
  */
-export async function checkRowCounts(buf: Buffer): Promise<void> {
-  const reader: any = new (ExcelJS as any).stream.xlsx.WorkbookReader(Readable.from(buf), {
-    entries: "emit", sharedStrings: "ignore", hyperlinks: "ignore", styles: "ignore", worksheets: "emit",
+async function countSheetRows(buf: Buffer, entry: ZipEntry, onRow: () => void): Promise<void> {
+  const h = entry.localOffset;
+  if (h + 30 > buf.length || buf.readUInt32LE(h) !== 0x04034b50) throw new ImportFileError("The file is damaged or isn't a valid .xlsx workbook.");
+  const start = h + 30 + buf.readUInt16LE(h + 26) + buf.readUInt16LE(h + 28);
+  const data = buf.subarray(start, start + entry.compressedSize);
+  if (entry.method !== 0 && entry.method !== 8) throw new ImportFileError("The file is damaged or isn't a valid .xlsx workbook.");
+
+  const ROW = /<(?:[A-Za-z_][\w.-]*:)?row[\s>/]/g;
+  let carry = "";
+  let bytes = 0;
+  const scan = (chunk: Buffer) => {
+    bytes += chunk.length;
+    if (bytes > MAX_UNCOMPRESSED_ENTRY) throw new ImportFileError("The workbook is too large to import.");
+    const text = carry + chunk.toString("latin1");
+    ROW.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    let lastEnd = 0;
+    while ((m = ROW.exec(text))) { onRow(); lastEnd = m.index + m[0].length; }
+    // Keep a short tail so a tag split across two chunks is still counted once.
+    carry = text.slice(Math.max(lastEnd, text.length - 16));
+  };
+  if (entry.method === 0) { scan(data); return; }
+
+  await new Promise<void>((resolve, reject) => {
+    const inflate = zlib.createInflateRaw();
+    inflate.on("data", (chunk: Buffer) => {
+      try { scan(chunk); } catch (err) { inflate.destroy(); reject(err); }
+    });
+    inflate.on("end", () => resolve());
+    inflate.on("error", () => reject(new ImportFileError("The file is damaged or isn't a valid .xlsx workbook.")));
+    inflate.end(data);
   });
+}
+
+/** Rejects workbooks with too many rows before the whole workbook is loaded into memory. */
+export async function checkRowCounts(buf: Buffer, entries: ZipEntry[]): Promise<void> {
   let total = 0;
-  for await (const sheet of reader) {
+  for (const entry of entries.filter((e) => /^xl\/worksheets\/[^/]+\.xml$/i.test(e.name))) {
     let rows = 0;
-    for await (const _row of sheet) {
+    await countSheetRows(buf, entry, () => {
       rows++;
       total++;
+      // Allow for each sheet's header and notes rows.
       if (rows > MAX_ROWS_PER_TAB + 2) {
         throw new ImportFileError(`A sheet has more than ${MAX_ROWS_PER_TAB.toLocaleString("en-GB")} rows. Split the import into smaller files.`);
       }
       if (total > MAX_ROWS_TOTAL + 2 * TABS.length) {
         throw new ImportFileError(`The workbook has more than ${MAX_ROWS_TOTAL.toLocaleString("en-GB")} rows in total. Split the import into smaller files.`);
       }
-    }
+    });
   }
 }
 
@@ -281,17 +327,14 @@ function parseSheet(ws: ExcelJS.Worksheet, tab: TabSpec, errors: ImportIssue[], 
 
 /** Checks the file, then reads every known tab. Throws ImportFileError for file-level problems. */
 export async function parseWorkbook(buf: Buffer): Promise<ParsedWorkbook> {
-  checkZipContainer(buf);
-  try {
-    await checkRowCounts(buf);
-  } catch (err) {
-    if (err instanceof ImportFileError) throw err;
-    throw new ImportFileError("The file is damaged or isn't a valid .xlsx workbook.");
-  }
+  const entries = checkZipContainer(buf);
+  await checkRowCounts(buf, entries);
   const wb = new ExcelJS.Workbook();
   try {
     await wb.xlsx.load(buf as any);
-  } catch {
+  } catch (err) {
+    // Logged without the message, which could quote file contents.
+    console.warn("[import] workbook could not be loaded:", describeErrorForLog(err));
     throw new ImportFileError("The file is damaged or isn't a valid .xlsx workbook.");
   }
 

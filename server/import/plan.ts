@@ -157,7 +157,7 @@ export function buildPlan(parsed: ParsedWorkbook, existing: Existing, importer: 
   // Parent-asset loops, checked over existing and imported assets together.
   if (parsed.tabs.assets) {
     const parentOf = new Map<string, string>();
-    for (const [id, a] of existing.records.assets) {
+    for (const [id, a] of Array.from(existing.records.assets)) {
       if (typeof a.parentAssetId === "string" && a.parentAssetId) parentOf.set(id, a.parentAssetId);
     }
     for (const op of records.assets) {
@@ -206,16 +206,16 @@ export function buildPlan(parsed: ParsedWorkbook, existing: Existing, importer: 
       if (!byAsset.has(assetId)) byAsset.set(assetId, new Map());
       byAsset.get(assetId)!.set(partId, qty);
     }
-    for (const [assetId, wanted] of byAsset) {
+    for (const [assetId, wanted] of Array.from(byAsset)) {
       const current = existing.spares.get(assetId) ?? new Map<string, number>();
       let changed = false;
-      for (const [partId, qty] of wanted) {
+      for (const [partId, qty] of Array.from(wanted)) {
         const had = current.get(partId);
         if (had === undefined) { s.new++; changed = true; }
         else if (had !== qty) { s.updated++; changed = true; }
         else s.unchanged++;
       }
-      for (const partId of current.keys()) {
+      for (const partId of Array.from(current.keys())) {
         if (!wanted.has(partId)) { s.removed!++; changed = true; }
       }
       spares.push({ assetId, parts: Array.from(wanted, ([partId, quantity]) => ({ partId, quantity })), changed });
