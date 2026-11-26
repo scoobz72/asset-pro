@@ -83,3 +83,6 @@ manage companies via `/api/platform/*`; the first one is created from `ADMIN_EMA
 - Asset audits and stock take cycle checks
 - Maintenance request portal
 - Transaction/audit trail logging
+
+## Database migrations
+Schema changes in `shared/schema.ts` need a matching, re-runnable SQL file in `deploy/migrations/` (and a line in `deploy/check-schema.sql`). `deploy.sh` runs these on the live database; `drizzle-kit push` is only used for a brand-new database (see `deploy/README.md`).

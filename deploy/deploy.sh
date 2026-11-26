@@ -12,22 +12,26 @@ APP_URL="$(grep -E '^APP_URL=' .env | cut -d= -f2-)" npm run build
 
 DATABASE_URL="$(grep -E '^DATABASE_URL=' .env | cut -d= -f2-)"
 
-# Tidy existing rows so new keys can be added, and copy data out of columns that the
-# push is about to drop. Safe to run on every deploy.
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f deploy/pre-push.sql
+# Bring the database up to date.
+#  - Brand-new database: drizzle-kit creates every table from shared/schema.ts.
+#  - Existing database: run the SQL files in deploy/migrations in order. Each is safe to
+#    re-run and applies fully or not at all. (drizzle-kit push is not used on existing
+#    databases: it wrongly tries to re-create users_company_id_id_key and fails.)
+export PGOPTIONS="-c client_min_messages=warning"
+if [ "$(psql "$DATABASE_URL" -tAc "select to_regclass('public.users') is not null")" = "t" ]; then
+  for migration in deploy/migrations/*.sql; do
+    echo "Applying $migration"
+    psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q --single-transaction -f "$migration"
+  done
+else
+  DATABASE_URL="$DATABASE_URL" npx drizzle-kit push
+fi
 
-# Create/update the database tables to match shared/schema.ts.
-# If a change would delete data, drizzle asks first - read it before answering.
-DATABASE_URL="$DATABASE_URL" npx drizzle-kit push
-
-# drizzle-kit exits successfully even when its questions are cancelled, so check that the
-# database really matches this version before restarting the app on it.
+# Check the database really matches this version before restarting the app on it.
 if ! psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f deploy/check-schema.sql >/dev/null; then
   echo ""
   echo "STOPPED: the database is missing tables or columns this version needs."
-  echo "drizzle-kit push did not apply all changes. Run it again and answer its questions:"
-  echo "  DATABASE_URL=\"\$(grep -E '^DATABASE_URL=' .env | cut -d= -f2-)\" npx drizzle-kit push"
-  echo "then re-run: bash deploy/deploy.sh   (the running app has not been restarted)"
+  echo "A migration in deploy/migrations is missing or failed. The running app has not been restarted."
   exit 1
 fi
 

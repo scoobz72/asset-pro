@@ -105,18 +105,19 @@ Sign in and check it works, then stop the Replit deployment.
 cd ~/assetpro && bash deploy/deploy.sh
 ```
 
-### First update after the Nov 2026 data-model change
+### Database changes
 
-`deploy.sh` first runs `deploy/pre-push.sql`. It copies supplier contacts and lead times
-into the new columns, and clears empty supplier links. Then `drizzle-kit push` asks about
-these changes; the expected answers are:
+`deploy.sh` no longer runs `drizzle-kit push` on the live database: drizzle-kit wrongly
+tries to drop and re-create `users_company_id_id_key`, which job assignments depend on,
+so the push fails. Instead, schema changes ship as SQL files in `deploy/migrations/`,
+run in name order on every deploy. Each file must be safe to run again (`IF NOT EXISTS`,
+existence checks) and runs in a single transaction. `deploy/check-schema.sql` then
+confirms the database matches the code; if it doesn't, the deploy stops before
+restarting the app.
 
-- **Drop `suppliers.contact`, `suppliers.lead_time` and `inventory.location`:** yes. Their
-  contents have already been copied, except part locations, which are replaced by bins.
-- **Add the unique constraint on `asset_parts` / "truncate the table?":** choose *No, add
-  the constraint without truncating*. The pre-push script has already removed duplicates.
-- **Rename a column** (for example `lead_time` to `lead_time_days`): choose **create
-  column**, not rename. The data has already been copied.
+When `shared/schema.ts` changes, add the matching `deploy/migrations/NNN-name.sql` and
+extend `check-schema.sql`. `drizzle-kit push` is still used to create a brand-new, empty
+database.
 
 After this deploy, give parts their bins on the Locations page (store rooms and bins), or
 through the Excel import once it is built.
