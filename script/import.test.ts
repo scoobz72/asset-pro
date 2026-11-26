@@ -205,3 +205,23 @@ test("a tab missing a required header is reported", async () => {
   const parsed = await parseWorkbook(Buffer.from(await wb.xlsx.writeBuffer() as ArrayBuffer));
   assert.match(parsed.errors[0].message, /Missing columns: Category, Unit/);
 });
+
+test("a name in an ID column is matched when exactly one record has that name", async () => {
+  const parsed = await parse({
+    locations: [
+      { id: "L1", name: "Line 1", siteId: "hfc production" },
+      { id: "L2", name: "Line 2", siteId: "Twin" },
+    ],
+    assets: [{ id: "A1", name: "Press", locationId: "Line 1" }],
+  });
+  const existing = emptyExisting();
+  existing.records.sites.set("SITE-01", { id: "SITE-01", name: "HFC Production" });
+  existing.records.sites.set("S-A", { id: "S-A", name: "Twin" });
+  existing.records.sites.set("S-B", { id: "S-B", name: "Twin" });
+  const plan = buildPlan(parsed, existing, IMPORTER);
+  assert.equal(plan.records.locations[0].values.siteId, "SITE-01");
+  assert.equal(plan.records.assets[0].values.locationId, "L1", "names of rows in the same workbook match too");
+  assert.equal(plan.errorCount, 1, "an ambiguous name is still an error");
+  assert.match(plan.errors[0].message, /name of 2 sites \(S-A, S-B\)/);
+  assert.ok(plan.warnings.some((w) => /'hfc production' matched by name to Site ID 'SITE-01'/.test(w.message)));
+});

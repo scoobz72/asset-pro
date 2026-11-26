@@ -97,13 +97,45 @@ export function buildPlan(parsed: ParsedWorkbook, existing: Existing, importer: 
   }
   const exists = (t: RecordTab, id: string) => existing.records[t].has(id) || workbookIds[t].has(id);
 
+  // People often type a name where an ID is expected ("HFC Production" for SITE-01).
+  // When a reference isn't an ID but matches exactly one record's name, the ID is used
+  // instead and the substitution is listed as a warning in the preview.
+  const nameIndex = new Map<RecordTab, Map<string, Set<string>>>();
+  const idsByName = (t: RecordTab, name: string): string[] => {
+    if (!nameIndex.has(t)) {
+      const index = new Map<string, Set<string>>();
+      const add = (id: unknown, n: unknown) => {
+        if (typeof id !== "string" || typeof n !== "string" || !n.trim()) return;
+        const key = n.trim().toLowerCase();
+        if (!index.has(key)) index.set(key, new Set());
+        index.get(key)!.add(id);
+      };
+      for (const [id, rec] of Array.from(existing.records[t])) add(id, rec.name);
+      for (const r of parsed.tabs[t] ?? []) add(r.values.id, r.values.name);
+      nameIndex.set(t, index);
+    }
+    return Array.from(nameIndex.get(t)!.get(name.trim().toLowerCase()) ?? []);
+  };
+  const byName = new Map<string, { tab: TabKey; column: string; name: string; id: string; rows: number[] }>();
+
   const checkRefs = (tab: TabKey, r: ParsedRow, columns: ColumnSpec[]) => {
     for (const col of columns) {
       if (!col.ref) continue;
       const v = r.values[col.key];
       if (typeof v !== "string") continue;
-      if (!exists(col.ref as RecordTab, v)) {
-        err(tab, r.row, col.header, `${col.header} ${quote(v)} not found: it isn't in your company or in the ${TAB_BY_KEY[col.ref].sheet} tab`);
+      const target = col.ref as RecordTab;
+      if (exists(target, v)) continue;
+      const label = TAB_BY_KEY[col.ref].label;
+      const matches = idsByName(target, v);
+      if (matches.length === 1) {
+        r.values[col.key] = matches[0];
+        const key = `${tab}\u0001${col.header}\u0001${v}`;
+        if (!byName.has(key)) byName.set(key, { tab, column: col.header, name: v, id: matches[0], rows: [] });
+        byName.get(key)!.rows.push(r.row);
+      } else if (matches.length > 1) {
+        err(tab, r.row, col.header, `${quote(v)} is the name of ${matches.length} ${label.toLowerCase()}s (${matches.join(", ")}). Use the ${col.header} instead`);
+      } else {
+        err(tab, r.row, col.header, `${col.header} ${quote(v)} not found: it isn't in your company or in the ${TAB_BY_KEY[col.ref].sheet} tab. Use the ID, not the name`);
       }
     }
   };
@@ -188,6 +220,8 @@ export function buildPlan(parsed: ParsedWorkbook, existing: Existing, importer: 
     const byAsset = new Map<string, Map<string, number>>();
     const pairRow = new Map<string, number>();
     for (const r of parsed.tabs.assetSpares) {
+      // References first, so a part named instead of its ID is resolved before duplicate checks.
+      checkRefs("assetSpares", r, spec.columns);
       const { assetId, partId } = r.values;
       if (typeof assetId !== "string" || typeof partId !== "string") continue;
       const pair = `${assetId}\u0001${partId}`;
@@ -197,7 +231,6 @@ export function buildPlan(parsed: ParsedWorkbook, existing: Existing, importer: 
         continue;
       }
       pairRow.set(pair, r.row);
-      checkRefs("assetSpares", r, spec.columns);
       const qty = typeof r.values.quantity === "number" ? r.values.quantity : 1;
       if (qty < 1) {
         err("assetSpares", r.row, "Quantity", "Quantity must be at least 1");
@@ -281,6 +314,15 @@ export function buildPlan(parsed: ParsedWorkbook, existing: Existing, importer: 
       const diff = op.changed.stock - Number(current?.stock ?? 0);
       if (diff !== 0) stockChanges.push({ partId: op.id, partName: name, quantity: diff });
     }
+  }
+
+  for (const m of Array.from(byName.values())) {
+    const rows = m.rows.length === 1 ? `row ${m.rows[0]}` : `${m.rows.length} rows`;
+    warnings.push({
+      tab: TAB_BY_KEY[m.tab].sheet,
+      column: m.column,
+      message: `${quote(m.name)} matched by name to ${m.column} ${quote(m.id)} (${rows})`,
+    });
   }
 
   // Errors in sheet order, then row order.
