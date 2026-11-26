@@ -3,7 +3,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-git pull --ff-only
+# Pull first, then restart this script so the steps below always come from the
+# version just pulled (bash would otherwise keep running the old copy).
+if [ -z "${DEPLOY_PULLED:-}" ]; then
+  git pull --ff-only
+  DEPLOY_PULLED=1 exec bash "$0" "$@"
+fi
 # Dev dependencies (vite, esbuild, tsx) are needed to build
 npm ci --include=dev --no-audit --no-fund
 
