@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.."
 # version just pulled (bash would otherwise keep running the old copy).
 if [ -z "${DEPLOY_PULLED:-}" ]; then
   git pull --ff-only
-  DEPLOY_PULLED=1 exec bash "$0" "$@"
+  DEPLOY_PULLED=1 exec bash deploy/deploy.sh "$@"
 fi
 # Dev dependencies (vite, esbuild, tsx) are needed to build
 npm ci --include=dev --no-audit --no-fund
