@@ -7,7 +7,7 @@ Branch: `move-off-replit`. Follows `docs/data-import-plan.md`.
 
 | Topic | Decision |
 |---|---|
-| Labour | Hours per engineer per job, plus an hourly rate per engineer (set by a Manager/Admin). The rate is copied onto each time entry, so later rate changes don't rewrite history. |
+| Labour | Hours per engineer per job, plus an hourly rate per engineer (set by an Admin). The rate is copied onto each time entry, so later rate changes don't rewrite history. |
 | Depreciation | One company-wide method and rate (Settings), applied to every asset. Financial year April–March. |
 | Documents | Stored on the VPS, max **10 MB** per file; PDF, images, Office files. Server backups must include the upload folder. |
 | Missed PPM | Missed when not completed within **7 days** of its due date (the company setting `ppm_grace_days`, default 7). |
@@ -16,7 +16,8 @@ Branch: `move-off-replit`. Follows `docs/data-import-plan.md`.
 | Home currency | GBP. Stock, FIFO and every report are in GBP only. A purchase in another currency is converted at the **receipt-day** rate; the lot keeps the original currency, price and rate for reference. |
 | PO currency | Every PO carries an explicit currency, GBP included, and every amount is shown with its code and symbol. Foreign POs also show the GBP equivalent with the rate and its date. Totals in different currencies are never added together. |
 | Exchange rates | European Central Bank daily reference rates, fetched by the server and kept as history. A Manager/Admin can override the rate on a PO (e.g. a fixed bank rate). |
-| PO approval | Per-person approval limit in GBP (ex-VAT), set by a Manager/Admin; Managers/Admins start unlimited, everyone else has none. The PO is converted at the **submission-day** rate for approval. Nobody approves their own PO. |
+| PO approval | Per-person approval limit in GBP (ex-VAT); Managers/Admins start unlimited, everyone else has none. The PO is converted at the **submission-day** rate for approval. An **Admin can approve any PO when needed**, whatever its value. Nobody approves their own PO. |
+| People management | **Admin only** (26 Nov 2026): adding users, changing roles, resetting passwords and setting PO approval limits. Nobody can change their own role. Managers keep their other rights (deletes, closing POs short, exchange-rate overrides). |
 | Sending | "Mark as sent" plus a printable/PDF PO. Emailing from the app later (needs a mail account on the server). |
 | Receiving | Partial deliveries allowed; receiving more than ordered is blocked (amend the PO instead). |
 | VAT | All prices, totals and limits ex-VAT. |
@@ -73,7 +74,7 @@ asset, ageing, restocking, parts replaced per asset, job parts) needs a trustwor
 
 ### 1.2 Job records
 
-- **`users.hourly_rate numeric(8,2)`:** set on the Team page by a Manager or Admin.
+- **`users.hourly_rate numeric(8,2)`:** set on the Team page by an Admin.
 - **New table `job_labour`:** `id serial`, `company_id`, `job_id`, `user_id`,
   `work_date date`, `hours numeric(5,2)`, `rate numeric(8,2)` (copied from the user at
   entry), `note`.

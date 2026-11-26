@@ -3,7 +3,7 @@
  * counts and the exact inserts/updates to make (plan sections 3.3 and 3.5).
  * Pure: no database access, so it can be unit-tested.
  */
-import { PLATFORM_ADMIN_ROLE, PRIVILEGED_ROLES } from "@shared/schema";
+import { PLATFORM_ADMIN_ROLE, PRIVILEGED_ROLES, ADMIN_ROLES } from "@shared/schema";
 import { TAB_BY_KEY, MAX_ERRORS_RETURNED, type TabKey, type ColumnSpec } from "./spec";
 import type { ParsedWorkbook, ImportIssue, CellValue, ParsedRow } from "./parse";
 
@@ -22,7 +22,12 @@ export interface Existing {
   emailsElsewhere: Set<string>;
 }
 
-export interface Importer { id: number; name: string }
+export interface Importer {
+  id: number;
+  name: string;
+  /** Only Admins may import users (adding people and setting roles is Admin-only). */
+  role?: string;
+}
 
 export type Action = "insert" | "update" | "unchanged";
 
@@ -306,7 +311,9 @@ export function buildPlan(parsed: ParsedWorkbook, existing: Existing, importer: 
 
   // ------------------------------------------------------------ users
   const users: UserOp[] = [];
-  if (parsed.tabs.users) {
+  if (parsed.tabs.users && parsed.tabs.users.length > 0 && !(ADMIN_ROLES as readonly string[]).includes(importer.role ?? "")) {
+    err("users", undefined, undefined, "Only an Admin can import users. Leave the Users tab empty, or ask an Admin to run the import.");
+  } else if (parsed.tabs.users) {
     const s: TabSummary = { key: "users", tab: TAB_BY_KEY.users.sheet, new: 0, updated: 0, unchanged: 0 };
     const byEmail = new Map(existing.users.filter((u) => u.email).map((u) => [u.email!.toLowerCase(), u]));
     const finalRole = new Map<string, string>(existing.users.map((u) => [`id:${u.id}`, u.role]));

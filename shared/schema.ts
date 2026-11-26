@@ -412,6 +412,11 @@ const numericInput = z.union([z.string(), z.number()]).transform((v) => String(v
 /** Runs the whole platform (creates companies). Never assignable through the API. */
 export const PLATFORM_ADMIN_ROLE = "PlatformAdmin";
 export const PRIVILEGED_ROLES = ["Manager", "Admin", PLATFORM_ADMIN_ROLE] as const;
+/**
+ * Admins (and the platform admin) alone manage people: add users, change roles, reset
+ * passwords and set PO approval limits. They can also approve any PO regardless of limit.
+ */
+export const ADMIN_ROLES = ["Admin", PLATFORM_ADMIN_ROLE] as const;
 /** Roles a company Manager/Admin may give to their own users. */
 export const USER_ROLES = ["Manager", "Admin", "Lead", "Technician"] as const;
 

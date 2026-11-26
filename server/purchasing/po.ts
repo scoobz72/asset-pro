@@ -189,7 +189,7 @@ export function runAction(companyId: number, id: string, action: Exclude<PoActio
       case "reject": {
         const [approver] = await tx.select({ limit: users.poApprovalLimit }).from(users)
           .where(and(eq(users.companyId, companyId), eq(users.id, actor.id)));
-        const problem = checkApprover({ approverId: actor.id, approverLimit: approver?.limit ?? null, createdById: po.createdById, totalHome: po.totalHome });
+        const problem = checkApprover({ approverId: actor.id, approverRole: actor.role, approverLimit: approver?.limit ?? null, createdById: po.createdById, totalHome: po.totalHome });
         if (problem) throw new PoError(problem, 403);
         if (action === "approve") {
           await tx.update(purchaseOrders).set({ status: "Approved", approvedById: actor.id, approvedAt: new Date() }).where(where);

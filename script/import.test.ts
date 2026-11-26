@@ -11,7 +11,7 @@ import { buildWorkbook, type ExampleRows } from "../server/import/template";
 import { exampleRows } from "../server/import/example";
 import { TAB_BY_KEY, MAX_ROWS_PER_TAB } from "../server/import/spec";
 
-const IMPORTER = { id: 1, name: "Test Manager" };
+const IMPORTER = { id: 1, name: "Test Admin", role: "Admin" };
 
 function emptyExisting(): Existing {
   const records = {} as Existing["records"];
@@ -146,7 +146,7 @@ test("user rules: other companies' emails, own role, last manager", async () => 
   assert.ok(messages.includes("You can't change your own role"));
 
   // Another manager demoting the only manager is caught too.
-  const plan2 = buildPlan(parsed, existing, { id: 99, name: "Other" });
+  const plan2 = buildPlan(parsed, existing, { id: 99, name: "Other Admin", role: "Admin" });
   assert.ok(plan2.errors.some((e) => /without a Manager or Admin/.test(e.message)));
 });
 
@@ -256,4 +256,12 @@ test("IDs in different letter case match; values from the wrong tab get a hint",
   const messages = plan.errors.map((e) => e.message);
   assert.ok(messages.some((m) => /'HFC Production' not found\. It looks like a site \(Sites tab\)/.test(m)));
   assert.ok(messages.some((m) => /'LINE 9' not found\. It looks like a location \(Asset Locations tab\)/.test(m)));
+});
+
+test("only an Admin can import users", async () => {
+  const parsed = await parse({ users: [{ name: "New Person", email: "new@example.invalid", role: "Technician" }] });
+  const asManager = buildPlan(parsed, emptyExisting(), { id: 1, name: "Manager", role: "Manager" });
+  assert.match(asManager.errors[0].message, /Only an Admin can import users/);
+  const asAdmin = buildPlan(parsed, emptyExisting(), IMPORTER);
+  assert.equal(asAdmin.errorCount, 0);
 });

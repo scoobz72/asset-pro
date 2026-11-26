@@ -16,7 +16,7 @@ import { ImportFileError } from "./import/parse";
 import { buildWorkbook, XLSX_MIME } from "./import/template";
 import { exampleRows } from "./import/example";
 import { MAX_FILE_BYTES } from "./import/spec";
-import { isPrivileged, requirePrivileged, requirePlatformAdmin, companyOf } from "./auth";
+import { isPrivileged, requirePrivileged, requirePlatformAdmin, requireAdmin, companyOf } from "./auth";
 import {
   insertUserSchema, updateUserSchema,
   insertSiteSchema, updateSiteSchema,
@@ -97,7 +97,7 @@ async function runImport(req: Request, res: Response, fn: typeof previewImport) 
     return res.status(400).json({ message: "Choose an .xlsx file to upload." });
   }
   const companyId = companyOf(req);
-  const importer = { id: req.user!.id, name: req.user!.name };
+  const importer = { id: req.user!.id, name: req.user!.name, role: req.user!.role };
   try {
     const result = await fn(body, companyId, importer);
     if (fn === commitImport) {
@@ -128,13 +128,14 @@ export async function registerRoutes(
     const data = await storage.getUsers(companyOf(req));
     res.json(data);
   });
-  app.post("/api/users", requirePrivileged, async (req, res) => {
+  // People management is Admin-only: adding users, changing roles, passwords and PO limits.
+  app.post("/api/users", requireAdmin, async (req, res) => {
     const data = parseBody(insertUserSchema, req, res);
     if (!data) return;
     const user = await storage.createUser(companyOf(req), data);
     res.status(201).json(user);
   });
-  app.patch("/api/users/:id", requirePrivileged, async (req, res) => {
+  app.patch("/api/users/:id", requireAdmin, async (req, res) => {
     const id = parseUserId(req, res);
     if (id === undefined) return;
     const data = parseUpdate(updateUserSchema, req, res);
@@ -143,6 +144,10 @@ export async function registerRoutes(
     if (!existing) return res.status(404).json({ message: "User not found" });
     if (existing.role === PLATFORM_ADMIN_ROLE && data.role !== undefined) {
       return res.status(400).json({ message: "The platform admin's role cannot be changed here" });
+    }
+    // Stops an Admin locking themselves out by demoting their own account.
+    if (id === req.user!.id && data.role !== undefined && data.role !== existing.role) {
+      return res.status(400).json({ message: "You can't change your own role. Ask another Admin." });
     }
     const user = await storage.updateUser(companyOf(req), id, data);
     if (!user) return res.status(404).json({ message: "User not found" });

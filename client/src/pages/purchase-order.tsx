@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ArrowLeft, Loader2, Printer, Send, CheckCircle2, XCircle, Undo2, PackageCheck, Pencil, Ban, Lock, Inbox } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useCurrentUser, PRIVILEGED_ROLES } from "@/hooks/use-auth";
+import { useCurrentUser, PRIVILEGED_ROLES, ADMIN_ROLES } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { HOME_CURRENCY, formatMoney } from "@shared/constants";
@@ -213,7 +213,9 @@ export default function PurchaseOrderPage() {
   const isCreator = !!me && po.createdById === me.id;
   const canManage = privileged || isCreator;
   const limit = (me as any)?.poApprovalLimit as string | null | undefined;
+  const isAdmin = !!me && (ADMIN_ROLES as string[]).includes(me.role);
   const approveBlock = !me ? "" : isCreator ? "You raised this PO, so someone else must approve it."
+    : isAdmin ? ""
     : limit === null || limit === undefined ? "You don't have PO approval rights."
     : po.totalHome !== null && Number(po.totalHome) > Number(limit) ? `Above your approval limit of ${formatMoney(limit, HOME_CURRENCY)}.` : "";
   const nothingReceived = po.lines.every((l) => l.quantityReceived === 0);
@@ -257,7 +259,7 @@ export default function PurchaseOrderPage() {
 
       {po.status === "Pending Approval" && approveBlock && (
         <p className="mb-4 text-sm rounded-md border border-amber-200 bg-amber-50 text-amber-900 px-3 py-2">
-          Awaiting approval by someone with a limit of at least {formatMoney(po.totalHome, HOME_CURRENCY)}. {approveBlock}
+          Awaiting approval by an Admin or someone with a limit of at least {formatMoney(po.totalHome, HOME_CURRENCY)}. {approveBlock}
         </p>
       )}
       {po.status === "Rejected" && po.rejectionReason && (

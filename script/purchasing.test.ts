@@ -58,6 +58,10 @@ test("approval: limits, no self-approval, no rights", () => {
   assert.match(checkApprover({ ...base, approverLimit: "1000.00" })!, /your approval limit is £1000\.00 GBP/);
   assert.match(checkApprover({ ...base, approverLimit: null })!, /don't have approval rights/);
   assert.match(checkApprover({ ...base, approverId: 1, approverLimit: "999999" })!, /PO you raised/);
+  // Admins can approve any PO when needed, whatever its value, but still not their own.
+  assert.equal(checkApprover({ ...base, approverRole: "Admin", approverLimit: null }), null);
+  assert.match(checkApprover({ ...base, approverId: 1, approverRole: "Admin", approverLimit: null })!, /PO you raised/);
+  assert.match(checkApprover({ ...base, approverRole: "Manager", approverLimit: "1000.00" })!, /approval limit/);
   assert.equal(canManage({ id: 5, name: "x", role: "Technician" }, 5), true);
   assert.equal(canManage({ id: 6, name: "x", role: "Technician" }, 5), false);
   assert.equal(canManage({ id: 6, name: "x", role: "Manager" }, 5), true);

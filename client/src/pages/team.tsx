@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import Layout from "@/components/Layout";
 import { useUsers, useCreateMutation, useUpdateMutation } from "@/hooks/use-data";
-import { useCurrentUser, PRIVILEGED_ROLES, PLATFORM_ADMIN_ROLE } from "@/hooks/use-auth";
+import { useCurrentUser, ADMIN_ROLES, PLATFORM_ADMIN_ROLE } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -112,7 +112,7 @@ function AddMemberDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
   );
 }
 
-function EditMemberDialog({ user, onClose }: { user: TeamUser | null; onClose: () => void }) {
+function EditMemberDialog({ user, onClose, selfId }: { user: TeamUser | null; onClose: () => void; selfId?: number }) {
   const { toast } = useToast();
   const update = useUpdateMutation("/api/users", ["/api/users"]);
   const [role, setRole] = useState("Technician");
@@ -133,6 +133,7 @@ function EditMemberDialog({ user, onClose }: { user: TeamUser | null; onClose: (
 
   if (!user) return null;
   const isPlatformAdmin = user.role === PLATFORM_ADMIN_ROLE;
+  const isSelf = user.id === selfId;
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -164,7 +165,10 @@ function EditMemberDialog({ user, onClose }: { user: TeamUser | null; onClose: (
           <DialogDescription>Change their role, PO approval limit or password.</DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
-          {!isPlatformAdmin && (
+          {!isPlatformAdmin && isSelf && (
+            <p className="text-sm text-muted-foreground">You can't change your own role. Ask another Admin.</p>
+          )}
+          {!isPlatformAdmin && !isSelf && (
             <div className="space-y-2">
               <Label>Role</Label>
               <Select value={role} onValueChange={setRole}>
@@ -215,7 +219,8 @@ function EditMemberDialog({ user, onClose }: { user: TeamUser | null; onClose: (
 export default function Team() {
   const { data: users, isLoading } = useUsers();
   const { data: currentUser } = useCurrentUser();
-  const canManage = !!currentUser && PRIVILEGED_ROLES.includes(currentUser.role);
+  // Only Admins manage people: add users, change roles, reset passwords, set approval limits.
+  const canManage = !!currentUser && ADMIN_ROLES.includes(currentUser.role);
   const userList = (users as TeamUser[] | undefined) ?? [];
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<TeamUser | null>(null);
@@ -296,7 +301,7 @@ export default function Team() {
       </div>
 
       <AddMemberDialog open={addOpen} onOpenChange={setAddOpen} />
-      <EditMemberDialog user={editing} onClose={() => setEditing(null)} />
+      <EditMemberDialog user={editing} onClose={() => setEditing(null)} selfId={currentUser?.id} />
     </Layout>
   );
 }

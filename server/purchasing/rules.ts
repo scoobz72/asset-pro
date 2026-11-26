@@ -2,7 +2,7 @@
  * Purchasing rules (docs/asset-stock-jobs-plan.md P.2): which action is allowed from which
  * status, who may approve, and delivery status. Pure, so they can be unit-tested.
  */
-import { PRIVILEGED_ROLES } from "@shared/schema";
+import { PRIVILEGED_ROLES, ADMIN_ROLES } from "@shared/schema";
 import type { PoStatus } from "@shared/constants";
 
 export type PoAction = "edit" | "submit" | "withdraw" | "approve" | "reject" | "recall" | "send" | "receive" | "close" | "cancel";
@@ -37,6 +37,7 @@ export function checkTransition(status: string, action: PoAction): string | null
 export interface PoActor { id: number; name: string; role: string }
 
 export const isPrivilegedRole = (role: string) => (PRIVILEGED_ROLES as readonly string[]).includes(role);
+export const isAdminRole = (role: string) => (ADMIN_ROLES as readonly string[]).includes(role);
 
 /** Creator or Manager/Admin: may edit, submit, withdraw, send and cancel. */
 export function canManage(actor: PoActor, createdById: number | null): boolean {
@@ -44,15 +45,17 @@ export function canManage(actor: PoActor, createdById: number | null): boolean {
 }
 
 /**
- * Approval rule: the approver needs a limit covering the PO's home-currency total, and
- * may not approve a PO they raised. Returns an error message, or null if allowed.
+ * Approval rule: nobody approves a PO they raised. An Admin may approve any other PO
+ * whatever its value; everyone else needs a limit covering the PO's home-currency total.
+ * Returns an error message, or null if allowed.
  */
 export function checkApprover(input: {
-  approverId: number; approverLimit: string | number | null; createdById: number | null; totalHome: string | number | null;
+  approverId: number; approverRole?: string; approverLimit: string | number | null; createdById: number | null; totalHome: string | number | null;
 }): string | null {
   if (input.createdById !== null && input.createdById === input.approverId) {
     return "You can't approve a PO you raised. Ask another approver.";
   }
+  if (input.approverRole && isAdminRole(input.approverRole)) return null;
   if (input.approverLimit === null || input.approverLimit === undefined || input.approverLimit === "") {
     return "You don't have approval rights for purchase orders.";
   }

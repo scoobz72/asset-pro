@@ -14,6 +14,8 @@ export type AuthUser = {
 
 export const PLATFORM_ADMIN_ROLE = "PlatformAdmin";
 export const PRIVILEGED_ROLES = ["Manager", "Admin", PLATFORM_ADMIN_ROLE];
+/** Only Admins add users, change roles, reset passwords and set PO approval limits. */
+export const ADMIN_ROLES = ["Admin", PLATFORM_ADMIN_ROLE];
 
 export const AUTH_QUERY_KEY = ["/api/auth/me"];
 

@@ -7,7 +7,7 @@ import { eq, sql } from "drizzle-orm";
 import { db, pool } from "./db";
 import { storage } from "./storage";
 import { hashPassword, verifyPassword } from "./password";
-import { users, companies, loginSchema, accessRequestInputSchema, PRIVILEGED_ROLES, PLATFORM_ADMIN_ROLE, type PublicUser } from "@shared/schema";
+import { users, companies, loginSchema, accessRequestInputSchema, PRIVILEGED_ROLES, ADMIN_ROLES, PLATFORM_ADMIN_ROLE, type PublicUser } from "@shared/schema";
 
 declare global {
   namespace Express {
@@ -281,6 +281,21 @@ export const requireAuth: RequestHandler = (req, res, next) => {
 
 export function isPrivileged(user: Express.User | undefined): boolean {
   return !!user && (PRIVILEGED_ROLES as readonly string[]).includes(user.role);
+}
+
+export function isAdmin(user: Express.User | undefined): boolean {
+  return !!user && (ADMIN_ROLES as readonly string[]).includes(user.role);
+}
+
+/** Restricts a route to Admins (people management: users, roles, approval limits). */
+export function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.isAuthenticated() || !req.user) {
+    return res.status(401).json({ message: "Authentication required" });
+  }
+  if (!isAdmin(req.user)) {
+    return res.status(403).json({ message: "Only an Admin can manage users, roles and approval limits" });
+  }
+  next();
 }
 
 /** Restricts a route to Manager/Admin users. */
