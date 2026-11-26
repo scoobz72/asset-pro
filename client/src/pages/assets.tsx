@@ -1,5 +1,6 @@
 import Layout from "@/components/Layout";
-import { useAssets, useLocations, useSites, useInventory, useAssetParts, useCreateMutation, useUpdateMutation, useDeleteMutation } from "@/hooks/use-data";
+import { useQuery } from "@tanstack/react-query";
+import { useAssets, useLocations, useSites, useInventory, useCreateMutation, useUpdateMutation, useDeleteMutation } from "@/hooks/use-data";
 import { 
   Card, 
   CardContent, 
@@ -8,6 +9,7 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
@@ -25,6 +27,8 @@ import {
   Check,
   FolderTree,
   List,
+  LayoutGrid,
+  Rows3,
   Building2,
   Box,
   Upload,
@@ -66,25 +70,35 @@ import { useMutation } from "@tanstack/react-query";
 
 import floorplanImg from "@/assets/images/floorplan.jpg";
 
-function AssetPartsInfo({ assetId, inventoryData }: { assetId: string; inventoryData: any[] }) {
-  const { data: parts } = useAssetParts(assetId);
-  
-  if (!parts || parts.length === 0) return null;
+type SpareLink = { assetId: string; partId: string; quantity: number };
+
+/** Spares for every asset in one request (shared by every card and row). */
+function useAllSpares() {
+  return useQuery<SpareLink[]>({ queryKey: ["/api/asset-parts"], staleTime: 60000 });
+}
+
+function AssetPartsInfo({ assetId, links, inventoryData, compact = false }: {
+  assetId: string; links: SpareLink[]; inventoryData: any[]; compact?: boolean;
+}) {
+  const parts = links.filter((l) => l.assetId === assetId);
+  if (parts.length === 0) return compact ? <span className="text-muted-foreground">—</span> : null;
 
   return (
-    <div className="space-y-1 text-left mr-4">
-      <p className="text-xs text-muted-foreground flex items-center">
-        <Wrench className="mr-1.5 size-3.5 opacity-70" /> Parts Used
-      </p>
+    <div className={cn("space-y-1 text-left", !compact && "mr-4")}>
+      {!compact && (
+        <p className="text-xs text-muted-foreground flex items-center">
+          <Wrench className="mr-1.5 size-3.5 opacity-70" /> Spares
+        </p>
+      )}
       <HoverCard>
         <HoverCardTrigger asChild>
           <Button variant="link" className="h-auto p-0 text-sm font-medium" data-testid={`link-parts-${assetId}`}>
-            {parts.length} Part(s)
+            {parts.length} part{parts.length === 1 ? "" : "s"}
           </Button>
         </HoverCardTrigger>
         <HoverCardContent className="w-80">
           <div className="space-y-2">
-            <h4 className="text-sm font-semibold">Common Parts</h4>
+            <h4 className="text-sm font-semibold">Spares</h4>
             <div className="text-sm">
               {parts.map((ap: any) => {
                 const part = inventoryData?.find((p: any) => p.id === ap.partId);
@@ -183,6 +197,72 @@ function AssetDetailFields({ value, onChange, assets, prefix }: {
   );
 }
 
+function AssetStatusBadge({ asset }: { asset: any }) {
+  return (
+    <Badge
+      className={cn(
+        "whitespace-nowrap",
+        asset.status === "Operational" ? "bg-green-500 hover:bg-green-600" :
+        asset.status === "Maintenance" ? "bg-yellow-500 hover:bg-yellow-600" :
+        asset.status === "Down" ? "bg-red-500 hover:bg-red-600" :
+        "bg-slate-500 hover:bg-slate-600",
+      )}
+      data-testid={`badge-asset-status-${asset.id}`}
+    >
+      {asset.status}
+    </Badge>
+  );
+}
+
+function HealthBar({ asset, compact = false }: { asset: any; compact?: boolean }) {
+  const colour = asset.health > 90 ? "text-green-600" : asset.health > 70 ? "text-yellow-600" : "text-red-600";
+  return (
+    <div className="space-y-1">
+      {!compact && (
+        <div className="flex items-center justify-between text-xs">
+          <span className="flex items-center text-muted-foreground"><Activity className="mr-1.5 size-3.5 opacity-70" /> Health</span>
+          <span className={cn("font-bold", colour)} data-testid={`text-asset-health-${asset.id}`}>{asset.health}%</span>
+        </div>
+      )}
+      <div className="flex items-center gap-2">
+        <Progress value={asset.health} className={cn(
+          "h-2 flex-1",
+          "[&>div]:bg-green-500",
+          asset.health < 90 && "[&>div]:bg-yellow-500",
+          asset.health < 70 && "[&>div]:bg-red-500",
+        )} />
+        {compact && <span className={cn("text-xs font-semibold w-9 text-right", colour)}>{asset.health}%</span>}
+      </div>
+    </div>
+  );
+}
+
+function AssetMenu({ asset, onEdit, onMove, onDelete }: { asset: any; onEdit: () => void; onMove: () => void; onDelete: () => void }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-8 w-8 bg-background/70 hover:bg-background" data-testid={`button-asset-menu-${asset.id}`} aria-label={`Actions for ${asset.name}`}>
+          <MoreHorizontal className="size-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuLabel>Asset Actions</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem data-testid={`menu-edit-${asset.id}`} onClick={onEdit}>
+          <Edit2 className="mr-2 size-4" /> Edit Details
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onMove}>
+          <MapPin className="mr-2 size-4" /> Move Location
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem data-testid={`menu-delete-${asset.id}`} className="text-red-600" onClick={onDelete}>
+          <Trash2 className="mr-2 size-4" /> Delete Asset
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export default function Assets() {
   const { data: assets = [], isLoading: assetsLoading } = useAssets();
   const { data: locationsData = [] } = useLocations();
@@ -191,6 +271,16 @@ export default function Assets() {
   
   const [uploadedDrawing, setUploadedDrawing] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const { data: spareLinks = [] } = useAllSpares();
+  // Tiles or one row per asset; remembered in this browser.
+  const [viewMode, setViewMode] = useState<"tiles" | "rows">(() => {
+    try { return localStorage.getItem("assets.view") === "rows" ? "rows" : "tiles"; } catch { return "tiles"; }
+  });
+  const chooseView = (mode: "tiles" | "rows") => {
+    setViewMode(mode);
+    try { localStorage.setItem("assets.view", mode); } catch { /* storage unavailable */ }
+  };
+  const [movingAsset, setMovingAsset] = useState<any>(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<any>(null);
@@ -437,181 +527,169 @@ export default function Assets() {
             <TabsTrigger value="drawing" className="gap-2" data-testid="tab-drawing"><MapIcon className="size-4" /> Floor Plan</TabsTrigger>
           </TabsList>
           
-          <div className="relative w-full sm:max-w-sm flex-1">
-            <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-            <Input data-testid="input-search-assets" placeholder="Search assets..." className="pl-9" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+          <div className="flex w-full sm:w-auto items-center gap-2">
+            <div className="relative flex-1 sm:w-72">
+              <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+              <Input data-testid="input-search-assets" placeholder="Search assets..." className="pl-9" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+            </div>
+            <div className="flex rounded-md border bg-background p-0.5" role="group" aria-label="Asset view">
+              <Button
+                variant={viewMode === "tiles" ? "secondary" : "ghost"} size="sm" className="h-8 px-2.5"
+                onClick={() => chooseView("tiles")} aria-pressed={viewMode === "tiles"} title="Tiles" data-testid="button-view-tiles"
+              >
+                <LayoutGrid className="size-4" />
+              </Button>
+              <Button
+                variant={viewMode === "rows" ? "secondary" : "ghost"} size="sm" className="h-8 px-2.5"
+                onClick={() => chooseView("rows")} aria-pressed={viewMode === "rows"} title="List" data-testid="button-view-rows"
+              >
+                <Rows3 className="size-4" />
+              </Button>
+            </div>
           </div>
         </div>
 
         <TabsContent value="list" className="space-y-4 m-0">
-          <div className="flex flex-col gap-4">
-            {filteredAssets.map((asset: any) => (
-          <Card key={asset.id} className="overflow-hidden transition-all hover:shadow-md" data-testid={`card-asset-${asset.id}`}>
-            <div className="flex flex-col sm:flex-row">
-              <div className="sm:w-48 h-48 sm:h-auto bg-muted/50 flex flex-col items-center justify-center border-r relative group">
-                {asset.image ? (
-                  <img src={asset.image} alt={asset.name} className="w-full h-full object-cover" />
-                ) : (
-                  <>
-                    <ImageIcon className="size-12 text-muted-foreground/30" />
-                    <span className="text-xs text-muted-foreground mt-2 font-medium">No Image</span>
-                  </>
-                )}
-                
-                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <Button variant="secondary" size="sm" className="h-8">
-                    <Plus className="mr-2 size-3" /> Upload
-                  </Button>
-                </div>
-              </div>
-              
-              <div className="flex-1 flex flex-col">
-                <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-                  <div>
-                    <div className="flex items-center gap-3">
-                      <CardTitle className="text-xl font-bold" data-testid={`text-asset-name-${asset.id}`}>{asset.name}</CardTitle>
-                      <Badge variant="outline" className="font-mono text-xs font-normal" data-testid={`text-asset-id-${asset.id}`}>
-                        {asset.id}
-                      </Badge>
-                      {asset.criticality && (
-                        <Badge variant="secondary" className="text-xs" title="Criticality">Crit. {asset.criticality}</Badge>
-                      )}
-                    </div>
-                    {(asset.category || asset.manufacturer || asset.model) && (
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {[asset.category, [asset.manufacturer, asset.model].filter(Boolean).join(" ")].filter(Boolean).join(" · ")}
-                      </p>
-                    )}
-                    <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
-                       <MapPin className="size-4 opacity-70" />
-                       <span className="font-medium text-foreground" data-testid={`text-asset-location-${asset.id}`}>{getLocationName(asset.locationId)}</span>
-                       <Dialog>
-                         <DialogTrigger asChild>
-                           <Button variant="ghost" size="sm" className="h-6 px-2 ml-1 text-xs" data-testid={`button-change-location-${asset.id}`}>
-                             Change
-                           </Button>
-                         </DialogTrigger>
-                         <DialogContent className="sm:max-w-[425px]">
-                           <DialogHeader>
-                             <DialogTitle>Update Asset Location</DialogTitle>
-                             <DialogDescription>
-                               Move this asset to a new location.
-                             </DialogDescription>
-                           </DialogHeader>
-                           <div className="grid gap-4 py-4">
-                             <div className="space-y-2">
-                               <Select onValueChange={(val) => handleLocationChange(asset.id, val)} defaultValue={asset.locationId || ""}>
-                                 <SelectTrigger>
-                                   <SelectValue placeholder="Select new location" />
-                                 </SelectTrigger>
-                                 <SelectContent>
-                                   {(sitesData as any[]).map((site: any) => {
-                                     const siteLocs = (locationsData as any[]).filter((l: any) => l.siteId === site.id);
-                                     if (siteLocs.length === 0) return null;
-                                     return (
-                                       <SelectGroup key={site.id}>
-                                         <SelectLabel className="font-semibold text-primary/70">{site.name}</SelectLabel>
-                                         {siteLocs.map((loc: any) => (
-                                           <SelectItem key={loc.id} value={loc.id}>
-                                             <div className="flex items-center">
-                                               {loc.name}
-                                               {asset.locationId === loc.id && <Check className="ml-2 size-3 text-green-500" />}
-                                             </div>
-                                           </SelectItem>
-                                         ))}
-                                       </SelectGroup>
-                                     );
-                                   })}
-                                 </SelectContent>
-                               </Select>
-                             </div>
-                           </div>
-                         </DialogContent>
-                       </Dialog>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-3">
-                    <Badge variant={asset.status === "Operational" ? "default" : "destructive"} className={cn(
-                      asset.status === "Operational" ? "bg-green-500 hover:bg-green-600" : 
-                      asset.status === "Maintenance" ? "bg-yellow-500 hover:bg-yellow-600" :
-                      "bg-red-500 hover:bg-red-600"
-                    )} data-testid={`badge-asset-status-${asset.id}`}>
-                      {asset.status}
-                    </Badge>
-                    
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" data-testid={`button-asset-menu-${asset.id}`}>
-                          <MoreHorizontal className="size-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Asset Actions</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem data-testid={`menu-edit-${asset.id}`} onClick={() => { setEditingAsset({ ...asset }); setEditDialogOpen(true); }}>
-                           <Edit2 className="mr-2 size-4" /> Edit Details
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                           <ImageIcon className="mr-2 size-4" /> Update Photo
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem>Schedule Maintenance</DropdownMenuItem>
-                        <DropdownMenuItem>View History</DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem data-testid={`menu-delete-${asset.id}`} className="text-red-600" onClick={() => handleDeleteAsset(asset.id)}>
-                           <Trash2 className="mr-2 size-4" /> Delete Asset
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </CardHeader>
-                
-                <CardContent className="flex-1 flex flex-col justify-end pb-4 pt-2">
-                  <div className="flex flex-wrap gap-4 items-end justify-between">
-                    <div className="space-y-1.5 flex-1 min-w-[200px]">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="flex items-center text-muted-foreground">
-                          <Activity className="mr-2 size-4 opacity-70" /> System Health
-                        </span>
-                        <span className={cn(
-                          "font-bold",
-                          asset.health > 90 ? "text-green-600" :
-                          asset.health > 70 ? "text-yellow-600" :
-                          "text-red-600"
-                        )} data-testid={`text-asset-health-${asset.id}`}>{asset.health}%</span>
-                      </div>
-                      <Progress value={asset.health} className={cn(
-                        "h-2",
-                        "[&>div]:bg-green-500",
-                        asset.health < 90 && "[&>div]:bg-yellow-500",
-                        asset.health < 70 && "[&>div]:bg-red-500"
-                      )} />
-                    </div>
-                    
-                    <div className="flex gap-4 text-right">
-                      <AssetPartsInfo assetId={asset.id} inventoryData={inventoryData as any[]} />
-
-                      <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground flex items-center justify-end">
-                          <Calendar className="mr-1.5 size-3.5 opacity-70" /> Last Service
-                        </p>
-                        <p className="text-sm font-medium" data-testid={`text-asset-service-${asset.id}`}>{asset.lastService || "N/A"}</p>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </div>
+          {filteredAssets.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <p className="text-lg font-medium">No assets found</p>
+              <p className="text-sm mt-1">Try adjusting your search or add a new asset.</p>
             </div>
-          </Card>
-        ))}
-        {filteredAssets.length === 0 && (
-          <div className="text-center py-12 text-muted-foreground">
-            <p className="text-lg font-medium">No assets found</p>
-            <p className="text-sm mt-1">Try adjusting your search or add a new asset.</p>
-          </div>
-        )}
-        </div>
+          ) : viewMode === "tiles" ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+              {filteredAssets.map((asset: any) => (
+                <Card key={asset.id} className="overflow-hidden flex flex-col transition-all hover:shadow-md" data-testid={`card-asset-${asset.id}`}>
+                  <div className="h-28 bg-muted/50 flex items-center justify-center border-b relative">
+                    {asset.image ? (
+                      <img src={asset.image} alt={asset.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <ImageIcon className="size-10 text-muted-foreground/30" />
+                    )}
+                    <div className="absolute top-2 left-2 flex gap-1.5">
+                      <AssetStatusBadge asset={asset} />
+                      {asset.criticality && <Badge variant="secondary" className="text-xs" title="Criticality">Crit. {asset.criticality}</Badge>}
+                    </div>
+                    <div className="absolute top-1 right-1">
+                      <AssetMenu asset={asset} onEdit={() => { setEditingAsset({ ...asset }); setEditDialogOpen(true); }} onMove={() => setMovingAsset(asset)} onDelete={() => handleDeleteAsset(asset.id)} />
+                    </div>
+                  </div>
+                  <CardHeader className="p-4 pb-2 space-y-1">
+                    <CardTitle className="text-base leading-snug line-clamp-2" data-testid={`text-asset-name-${asset.id}`}>{asset.name}</CardTitle>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span className="font-mono" data-testid={`text-asset-id-${asset.id}`}>{asset.id}</span>
+                      {asset.category && <><span>·</span><span className="truncate">{asset.category}</span></>}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-4 pt-0 mt-auto space-y-3">
+                    <button
+                      className="flex items-center gap-1.5 text-sm text-left hover:underline"
+                      onClick={() => setMovingAsset(asset)} title="Change location"
+                      data-testid={`button-change-location-${asset.id}`}
+                    >
+                      <MapPin className="size-3.5 opacity-70 shrink-0" />
+                      <span className="truncate" data-testid={`text-asset-location-${asset.id}`}>{getLocationName(asset.locationId)}</span>
+                    </button>
+                    <HealthBar asset={asset} />
+                    <div className="flex items-end justify-between text-sm">
+                      <AssetPartsInfo assetId={asset.id} links={spareLinks} inventoryData={inventoryData as any[]} />
+                      <div className="text-right">
+                        <p className="text-xs text-muted-foreground flex items-center justify-end">
+                          <Calendar className="mr-1 size-3 opacity-70" /> Last service
+                        </p>
+                        <p className="font-medium" data-testid={`text-asset-service-${asset.id}`}>{asset.lastService || "N/A"}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <Card className="overflow-hidden">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[120px]">ID</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead className="hidden md:table-cell">Category</TableHead>
+                      <TableHead>Location</TableHead>
+                      <TableHead className="hidden sm:table-cell text-center">Crit.</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="hidden lg:table-cell w-[140px]">Health</TableHead>
+                      <TableHead className="hidden lg:table-cell">Spares</TableHead>
+                      <TableHead className="hidden xl:table-cell">Last service</TableHead>
+                      <TableHead className="w-[48px]"><span className="sr-only">Actions</span></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredAssets.map((asset: any) => (
+                      <TableRow key={asset.id} data-testid={`row-asset-${asset.id}`}>
+                        <TableCell className="font-mono text-xs">{asset.id}</TableCell>
+                        <TableCell>
+                          <div className="font-medium">{asset.name}</div>
+                          {(asset.manufacturer || asset.model) && (
+                            <div className="text-xs text-muted-foreground">{[asset.manufacturer, asset.model].filter(Boolean).join(" ")}</div>
+                          )}
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-sm">{asset.category || <span className="text-muted-foreground">—</span>}</TableCell>
+                        <TableCell>
+                          <button className="text-sm text-left hover:underline" onClick={() => setMovingAsset(asset)} title="Change location">
+                            {getLocationName(asset.locationId)}
+                          </button>
+                        </TableCell>
+                        <TableCell className="hidden sm:table-cell text-center">{asset.criticality || <span className="text-muted-foreground">—</span>}</TableCell>
+                        <TableCell><AssetStatusBadge asset={asset} /></TableCell>
+                        <TableCell className="hidden lg:table-cell"><HealthBar asset={asset} compact /></TableCell>
+                        <TableCell className="hidden lg:table-cell">
+                          <AssetPartsInfo assetId={asset.id} links={spareLinks} inventoryData={inventoryData as any[]} compact />
+                        </TableCell>
+                        <TableCell className="hidden xl:table-cell text-sm">{asset.lastService || <span className="text-muted-foreground">—</span>}</TableCell>
+                        <TableCell>
+                          <AssetMenu asset={asset} onEdit={() => { setEditingAsset({ ...asset }); setEditDialogOpen(true); }} onMove={() => setMovingAsset(asset)} onDelete={() => handleDeleteAsset(asset.id)} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </Card>
+          )}
+
+          <Dialog open={!!movingAsset} onOpenChange={(open) => !open && setMovingAsset(null)}>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>Move {movingAsset?.name}</DialogTitle>
+                <DialogDescription>Choose the asset's new location.</DialogDescription>
+              </DialogHeader>
+              <Select
+                onValueChange={(val) => { handleLocationChange(movingAsset.id, val); setMovingAsset(null); }}
+                defaultValue={movingAsset?.locationId || undefined}
+              >
+                <SelectTrigger data-testid="select-move-location">
+                  <SelectValue placeholder="Select new location" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(sitesData as any[]).map((site: any) => {
+                    const siteLocs = (locationsData as any[]).filter((l: any) => l.siteId === site.id);
+                    if (siteLocs.length === 0) return null;
+                    return (
+                      <SelectGroup key={site.id}>
+                        <SelectLabel className="font-semibold text-primary/70">{site.name}</SelectLabel>
+                        {siteLocs.map((loc: any) => (
+                          <SelectItem key={loc.id} value={loc.id}>
+                            <div className="flex items-center">
+                              {loc.name}
+                              {movingAsset?.locationId === loc.id && <Check className="ml-2 size-3 text-green-500" />}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         <TabsContent value="topology" className="m-0">
