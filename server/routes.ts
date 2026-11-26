@@ -3,7 +3,14 @@ import { type Server } from "http";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
 import { storage } from "./storage";
-import { recordMovementNow, recordStockTake, StockError } from "./stock/ledger";
+import { recordMovementNow, recordStockTake, StockError, ukToday } from "./stock/ledger";
+import {
+  PoError, listPos, getPo, createPo, updateDraft, runAction, receiveGoods,
+  reorderSuggestions, createFromReorder, onOrderByPart,
+} from "./purchasing/po";
+import { quoteRate } from "./purchasing/rates";
+import { db } from "./db";
+import { CURRENCIES, HOME_CURRENCY } from "@shared/constants";
 import { previewImport, commitImport, ImportInvalidError } from "./import/commit";
 import { ImportFileError } from "./import/parse";
 import { buildWorkbook, XLSX_MIME } from "./import/template";
@@ -22,6 +29,7 @@ import {
   insertJobSchema, updateJobSchema,
   insertTemplateSchema, updateTemplateSchema,
   stockMovementSchema, stockTakeSchema,
+  poDraftSchema, poActionSchema, goodsReceiptSchema, reorderCreateSchema,
   insertPurchaseOrderSchema, updatePurchaseOrderSchema,
   insertAssetAuditSchema, updateAssetAuditSchema,
   insertMaintenanceRequestSchema, updateMaintenanceRequestSchema,
@@ -105,7 +113,6 @@ async function runImport(req: Request, res: Response, fn: typeof previewImport) 
 }
 
 // Purchase-order decisions that only Managers/Admins may make.
-const PO_APPROVAL_STATUSES = new Set(["Approved", "Rejected"]);
 
 export async function registerRoutes(
   httpServer: Server,
@@ -420,29 +427,64 @@ export async function registerRoutes(
     }
   });
 
-  // ===== PURCHASE ORDERS =====
+  // ===== PURCHASING (docs/asset-stock-jobs-plan.md phase P) =====
+  // Status changes only happen through these actions; each checks the rules and who may act.
+  const poActor = (req: Request) => ({ id: req.user!.id, name: req.user!.name, role: req.user!.role });
+  const poErrors = (fn: (req: Request, res: Response) => Promise<unknown>) => async (req: Request, res: Response) => {
+    try {
+      await fn(req, res);
+    } catch (err) {
+      if (err instanceof PoError || err instanceof StockError) return res.status(err.status).json({ message: err.message });
+      throw err;
+    }
+  };
+
   app.get("/api/purchase-orders", async (req, res) => {
-    const data = await storage.getPurchaseOrders(companyOf(req));
-    res.json(data);
+    res.json(await listPos(companyOf(req)));
   });
-  app.post("/api/purchase-orders", async (req, res) => {
-    const data = parseBody(insertPurchaseOrderSchema, req, res);
+  app.get("/api/purchase-orders/:id", poErrors(async (req, res) => {
+    res.json(await getPo(companyOf(req), String(req.params.id)));
+  }));
+  app.post("/api/purchase-orders", poErrors(async (req, res) => {
+    const data = parseBody(poDraftSchema, req, res);
     if (!data) return;
-    if (data.status && PO_APPROVAL_STATUSES.has(data.status) && !isPrivileged(req.user)) {
-      return res.status(403).json({ message: "Only managers can approve or reject purchase orders" });
+    res.status(201).json(await createPo(companyOf(req), data, poActor(req)));
+  }));
+  app.put("/api/purchase-orders/:id", poErrors(async (req, res) => {
+    const data = parseBody(poDraftSchema, req, res);
+    if (!data) return;
+    res.json(await updateDraft(companyOf(req), String(req.params.id), data, poActor(req)));
+  }));
+  const PO_ACTIONS = new Set(["submit", "withdraw", "approve", "reject", "recall", "send", "close", "cancel"]);
+  app.post("/api/purchase-orders/:id/:action", poErrors(async (req, res) => {
+    const action = String(req.params.action);
+    if (action === "receipts") {
+      const data = parseBody(goodsReceiptSchema, req, res);
+      if (!data) return;
+      return res.json(await receiveGoods(companyOf(req), String(req.params.id), data, poActor(req)));
     }
-    const po = await storage.createPurchaseOrder(companyOf(req), data);
-    res.status(201).json(po);
+    if (!PO_ACTIONS.has(action)) return res.status(404).json({ message: "Unknown action" });
+    const data = parseBody(poActionSchema, req, res);
+    if (!data) return;
+    res.json(await runAction(companyOf(req), String(req.params.id), action as any, data, poActor(req)));
+  }));
+  app.get("/api/purchasing/reorder", async (req, res) => {
+    res.json(await reorderSuggestions(companyOf(req)));
   });
-  app.patch("/api/purchase-orders/:id", async (req, res) => {
-    const data = parseUpdate(updatePurchaseOrderSchema, req, res);
+  app.post("/api/purchasing/reorder", poErrors(async (req, res) => {
+    const data = parseBody(reorderCreateSchema, req, res);
     if (!data) return;
-    if (data.status && PO_APPROVAL_STATUSES.has(data.status) && !isPrivileged(req.user)) {
-      return res.status(403).json({ message: "Only managers can approve or reject purchase orders" });
-    }
-    const po = await storage.updatePurchaseOrder(companyOf(req), String(req.params.id), data);
-    if (!po) return res.status(404).json({ message: "PO not found" });
-    res.json(po);
+    res.status(201).json(await createFromReorder(companyOf(req), data.items, poActor(req)));
+  }));
+  app.get("/api/purchasing/on-order", async (req, res) => {
+    res.json(Object.fromEntries(await onOrderByPart(companyOf(req))));
+  });
+  app.get("/api/exchange-rates/latest", async (req, res) => {
+    const currency = String(req.query.currency ?? "").toUpperCase();
+    if (!(CURRENCIES as readonly string[]).includes(currency)) return res.status(400).json({ message: "Unknown currency" });
+    const quote = await quoteRate(db, currency, ukToday());
+    if (!quote) return res.status(404).json({ message: `No exchange rate for ${currency} yet` });
+    res.json({ currency, homeCurrency: HOME_CURRENCY, ...quote });
   });
 
   // ===== ASSET AUDITS =====

@@ -183,3 +183,12 @@
     display: none !important;
   }
 }
+
+/* Purchase orders print on A4 portrait (everything else defaults to landscape). */
+@page po {
+  size: A4 portrait;
+  margin: 15mm;
+}
+.po-print {
+  page: po;
+}

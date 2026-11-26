@@ -19,3 +19,43 @@ export const STOCK_MOVEMENT_TYPES = [...STOCK_IN_TYPES, ...STOCK_OUT_TYPES, ...S
 export type StockMovementType = (typeof STOCK_MOVEMENT_TYPES)[number];
 /** Types a person can choose on the Inventory page (stock takes and imports have their own screens). */
 export const MANUAL_MOVEMENT_TYPES = [...STOCK_IN_TYPES, ...STOCK_OUT_TYPES] as const;
+
+/** The company's home currency: stock, FIFO and all reports are in this currency. */
+export const HOME_CURRENCY = "GBP" as const;
+
+/**
+ * Currencies a supplier or PO can use: GBP plus those in the European Central Bank's daily
+ * reference rates (the rate source, see server/purchasing/rates.ts).
+ */
+export const CURRENCIES = [
+  "GBP", "EUR", "USD", "CHF", "DKK", "SEK", "NOK", "PLN", "CZK", "HUF", "RON", "BGN", "ISK", "TRY",
+  "JPY", "CNY", "HKD", "SGD", "KRW", "INR", "IDR", "MYR", "PHP", "THB", "AUD", "NZD", "CAD", "MXN",
+  "BRL", "ZAR", "ILS",
+] as const;
+export type Currency = (typeof CURRENCIES)[number];
+
+const SYMBOLS: Record<string, string> = {
+  GBP: "£", EUR: "€", USD: "$", JPY: "¥", CNY: "¥", INR: "₹", KRW: "₩", TRY: "₺", ILS: "₪", PHP: "₱",
+  THB: "฿", PLN: "zł", CHF: "CHF ", AUD: "A$", NZD: "NZ$", CAD: "C$", HKD: "HK$", SGD: "S$", ZAR: "R", BRL: "R$", MXN: "MX$",
+};
+export const currencySymbol = (code: string) => SYMBOLS[code] ?? `${code} `;
+
+/**
+ * Formats an amount so its currency is always clear: symbol, amount and code,
+ * e.g. "£10.50 GBP" or "€12.40 EUR".
+ */
+export function formatMoney(amount: number | string | null | undefined, currency: string, decimals = 2): string {
+  if (amount === null || amount === undefined || amount === "") return "—";
+  const n = Number(amount);
+  if (!Number.isFinite(n)) return "—";
+  const body = Math.abs(n).toLocaleString("en-GB", { minimumFractionDigits: decimals, maximumFractionDigits: Math.max(decimals, 2) });
+  return `${n < 0 ? "−" : ""}${currencySymbol(currency)}${body} ${currency}`;
+}
+
+/** Purchase order statuses, in lifecycle order (docs/asset-stock-jobs-plan.md P.2). */
+export const PO_STATUSES = [
+  "Draft", "Pending Approval", "Approved", "Rejected", "Sent", "Partially Received", "Received", "Closed", "Cancelled",
+] as const;
+export type PoStatus = (typeof PO_STATUSES)[number];
+/** Statuses where goods are still expected (count as "on order"). */
+export const PO_OPEN_STATUSES = ["Draft", "Pending Approval", "Approved", "Sent", "Partially Received"] as const;

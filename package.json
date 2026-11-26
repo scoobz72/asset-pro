@@ -13,6 +13,7 @@
     "test:security": "tsx --test script/security.test.ts",
     "test:import": "tsx --test script/import.test.ts",
     "test:ledger": "tsx --test script/ledger.test.ts",
+    "test:purchasing": "tsx --test script/purchasing.test.ts",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {

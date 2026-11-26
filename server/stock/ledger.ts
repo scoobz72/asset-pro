@@ -22,6 +22,9 @@ export class StockError extends Error {
 
 export interface Actor { name: string }
 
+/** For receipts priced in another currency: what was paid per unit, and the rate used. */
+export interface Origin { currency: string; originalUnitCost: number; exchangeRate: number }
+
 const IN = new Set<string>(STOCK_IN_TYPES);
 const OUT = new Set<string>(STOCK_OUT_TYPES);
 const REPLENISH = new Set<string>(["Stock In", "Purchase Order"]);
@@ -79,7 +82,9 @@ async function returnCost(tx: Tx, companyId: number, jobId: string, partId: stri
  * Records one stock movement. Must be called inside a transaction.
  * Returns the transaction row written.
  */
-export async function recordMovement(tx: Tx, companyId: number, input: StockMovementInput, actor: Actor): Promise<StockTransaction> {
+export async function recordMovement(
+  tx: Tx, companyId: number, input: StockMovementInput, actor: Actor, origin?: Origin,
+): Promise<StockTransaction> {
   const type = input.type as StockMovementType;
   const delta = signedQuantity(type, input.quantity);
   const part = await lockPart(tx, companyId, input.partId);
@@ -167,6 +172,11 @@ export async function recordMovement(tx: Tx, companyId: number, input: StockMove
     jobId: input.jobId ?? null,
     assetId,
     poId: input.poId ?? null,
+    ...(origin && delta > 0 ? {
+      currency: origin.currency,
+      originalUnitCost: unit4(origin.originalUnitCost),
+      exchangeRate: origin.exchangeRate.toFixed(8),
+    } : {}),
   }).returning();
 
   if (delta > 0) {
@@ -177,6 +187,11 @@ export async function recordMovement(tx: Tx, companyId: number, input: StockMove
       quantityRemaining: delta,
       unitCost: unit4(unitCost),
       transactionId: id,
+      ...(origin ? {
+        currency: origin.currency,
+        originalUnitCost: unit4(origin.originalUnitCost),
+        exchangeRate: origin.exchangeRate.toFixed(8),
+      } : {}),
     });
   }
   return txn;

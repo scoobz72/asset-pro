@@ -129,6 +129,7 @@ const publicUserColumns = {
   status: users.status,
   avatar: users.avatar,
   email: users.email,
+  poApprovalLimit: users.poApprovalLimit,
   companyId: users.companyId,
 };
 

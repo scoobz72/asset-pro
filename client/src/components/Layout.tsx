@@ -76,7 +76,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         
         <nav className="flex-1 px-4 py-4 space-y-1">
           {navigation.map((item) => {
-            const isActive = location === item.href;
+            const isActive = (item.href === "/" ? location === "/" : location === item.href || location.startsWith(item.href + "/"));
             return (
               <Link key={item.name} href={item.href}>
                 <a className={cn(
@@ -126,7 +126,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                       <a 
                         className={cn(
                           "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
-                          location === item.href
+                          (item.href === "/" ? location === "/" : location === item.href || location.startsWith(item.href + "/"))
                             ? "bg-sidebar-accent text-sidebar-accent-foreground" 
                             : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
                         )}

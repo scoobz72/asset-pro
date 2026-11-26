@@ -1,5 +1,6 @@
 import express from "express";
 import { registerRoutes } from "./routes";
+import { startRateRefresh } from "./purchasing/rates";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { setupAuth } from "./auth";
@@ -81,6 +82,8 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+      // ECB exchange rates for purchasing: now, then every 6 hours. Never blocks start-up.
+      startRateRefresh();
     },
   );
 })();

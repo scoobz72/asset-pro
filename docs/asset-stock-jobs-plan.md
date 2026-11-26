@@ -12,6 +12,14 @@ Branch: `move-off-replit`. Follows `docs/data-import-plan.md`.
 | Documents | Stored on the VPS, max **10 MB** per file; PDF, images, Office files. Server backups must include the upload folder. |
 | Missed PPM | Missed when not completed within **7 days** of its due date (the company setting `ppm_grace_days`, default 7). |
 | Costing | FIFO: every receipt is a cost layer ("lot"); issues consume the oldest lots first. |
+| Order of work | Purchasing (section P) is built straight after the stock ledger, before job records. |
+| Home currency | GBP. Stock, FIFO and every report are in GBP only. A purchase in another currency is converted at the **receipt-day** rate; the lot keeps the original currency, price and rate for reference. |
+| PO currency | Every PO carries an explicit currency, GBP included, and every amount is shown with its code and symbol. Foreign POs also show the GBP equivalent with the rate and its date. Totals in different currencies are never added together. |
+| Exchange rates | European Central Bank daily reference rates, fetched by the server and kept as history. A Manager/Admin can override the rate on a PO (e.g. a fixed bank rate). |
+| PO approval | Per-person approval limit in GBP (ex-VAT), set by a Manager/Admin; Managers/Admins start unlimited, everyone else has none. The PO is converted at the **submission-day** rate for approval. Nobody approves their own PO. |
+| Sending | "Mark as sent" plus a printable/PDF PO. Emailing from the app later (needs a mail account on the server). |
+| Receiving | Partial deliveries allowed; receiving more than ordered is blocked (amend the PO instead). |
+| VAT | All prices, totals and limits ex-VAT. |
 
 ## Why the stock ledger comes first
 
@@ -101,6 +109,81 @@ asset, ageing, restocking, parts replaced per asset, job parts) needs a trustwor
 
 ---
 
+## Phase P: purchasing and currency (built after 1.1)
+
+### P.1 Data
+
+- **`companies.home_currency`:** default `GBP`.
+- **`suppliers.currency`:** the default for new POs.
+- **New table `exchange_rates`:** columns `rate_date`, `currency`, `per_eur`, with primary key
+  `(rate_date, currency)`. The rates are ECB, EUR-based, and shared by all companies.
+- **`users.po_approval_limit numeric(14,2)`:** null means no approval rights.
+- **`purchase_orders` gains:**
+  - `supplier_id`, `currency`;
+  - `exchange_rate` (GBP per 1 unit of the PO currency, fixed at submission), `rate_date`,
+    `rate_source` (`ECB` | `Manual` | `Home`), `total_home`;
+  - `job_id`, `expected_date`, `notes`;
+  - `created_by_id`, `created_at`, `submitted_at`;
+  - `approved_by_id`, `approved_at`;
+  - `sent_by_id`, `sent_at`;
+  - `rejection_reason`.
+
+  `vendor` is kept as a snapshot of the supplier's name.
+- **New table `purchase_order_lines`:** `line_no`, `part_id` (null for non-stock items or
+  services), `description`, `quantity`, `unit_price` (in the PO currency),
+  `quantity_received`, `quantity_cancelled`.
+- **New tables `goods_receipts` and `goods_receipt_lines`:** one header per delivery
+  (delivery note, rate used), and per line the quantity plus the ledger transaction it
+  created.
+- **New table `po_events`:** the audit trail for every action (who, when, note).
+- **`stock_lots` and `stock_transactions` gain:** `currency`, `original_unit_cost` and
+  `exchange_rate`, so GBP values can show their original price.
+
+### P.2 Status flow
+
+| From | Action | To | Who |
+|---|---|---|---|
+| Draft / Rejected | Edit lines | (same) | creator, Manager/Admin |
+| Draft / Rejected | Submit (rate fixed now) | Pending Approval | creator, Manager/Admin |
+| Pending Approval | Withdraw | Draft | creator, Manager/Admin |
+| Pending Approval | Approve | Approved | anyone whose limit ≥ `total_home`, not the creator |
+| Pending Approval | Reject (reason required) | Rejected | same as approve |
+| Approved | Recall (approval cleared) | Draft | creator, approver, Manager/Admin |
+| Approved | Mark sent | Sent | creator, Manager/Admin |
+| Sent / Partially Received | Receive goods | Partially Received / Received | anyone signed in |
+| Partially Received | Close short (cancel what's outstanding) | Closed | Manager/Admin |
+| Draft … Sent, nothing received | Cancel (reason required) | Cancelled | creator, Manager/Admin |
+
+- Lines can only be changed in Draft or Rejected.
+- Delivery status per line: Not received, Part received (x of y), Received, or Cancelled.
+
+### P.3 Goods receipt
+
+- Each received stock line becomes a ledger movement: type `Purchase Order`, linked to the
+  PO and to its job if it has one.
+- Its GBP unit cost is the line price × the rate on the receipt day (latest ECB on or
+  before that day, or a Manager's override). This creates the FIFO lot.
+- Non-stock lines record the received quantity only.
+
+### P.4 Reorder (replenishment)
+
+- `GET /api/purchasing/reorder` lists parts where stock plus quantity on order is at or
+  below `min_stock`.
+- Suggested quantity is `reorder_qty`, or else what brings stock back up to `min_stock`
+  plus one.
+- Selected parts become one Draft PO per primary supplier, in that supplier's currency, at
+  the part's unit cost converted to that currency.
+- Phase 3 adds usage-based suggestions.
+
+### P.5 Rates
+
+- The server fetches the ECB daily feed at start-up and every 6 hours, and the last 90
+  days on first run.
+- Conversion uses the latest rate on or before the date.
+- If there's no rate, the PO can't be submitted or received until a Manager enters one.
+
+---
+
 ## Phase 2: asset history, financials, documents
 
 ### 2.1 Location history
@@ -177,7 +260,9 @@ part of this phase.
 | Step | State |
 |---|---|
 | 1.1 Stock ledger | Built: `server/stock/{fifo,ledger}.ts`, `POST /api/stock/movements`, `POST /api/stock/stock-take`, migration `002-stock-ledger.sql`; Inventory, Stock Take, Transactions pages and the Excel import use it. Tests: `npm run test:ledger` (the database part runs only with `DATABASE_URL`, always rolled back) |
-| 1.2 Job records | Next |
+| P Purchasing and currency | Built: `server/purchasing/{rules,fx,rates,po}.ts`, migration `003-purchasing.sql`, PO list / detail / print pages, reorder suggestions, approval limits on the Team page, supplier currency (also in the Excel import). Tests: `npm run test:purchasing` (the end-to-end part needs `DATABASE_URL`; it uses a throwaway company and deletes it afterwards) |
+| R Scheduled dashboard reports (PDF by email) | Next, with emailing POs: needs an SMTP mailbox in `.env` and the `nodemailer` + `pdfkit` packages |
+| 1.2 Job records | After purchasing |
 | 1.3 PPM schedules | Not started |
 | Phase 2 | Not started |
 | Phase 3 | Not started |

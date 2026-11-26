@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, integer, numeric, timestamp, boolean, jsonb, date, primaryKey, foreignKey, unique, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
-import { LOCATION_TYPES, CRITICALITIES, STOCK_MOVEMENT_TYPES } from "./constants";
+import { LOCATION_TYPES, CRITICALITIES, STOCK_MOVEMENT_TYPES, CURRENCIES, HOME_CURRENCY } from "./constants";
 
 /**
  * Multi-company model: every business record carries company_id, and record codes
@@ -16,6 +16,8 @@ export * from "./constants";
 export const companies = pgTable("companies", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   name: text("name").notNull(),
+  /** Stock, FIFO and reports are valued in this currency. */
+  homeCurrency: text("home_currency").notNull().default(HOME_CURRENCY),
   status: text("status").notNull().default("Active"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -42,6 +44,8 @@ export const users = pgTable("users", {
   avatar: text("avatar"),
   email: text("email"),
   password: text("password"),
+  /** Largest PO (home currency, ex-VAT) this person may approve; null = can't approve. */
+  poApprovalLimit: numeric("po_approval_limit", { precision: 14, scale: 2 }),
   companyId: companyId(),
 }, (t) => [
   unique("users_company_id_id_key").on(t.companyId, t.id),
@@ -158,6 +162,8 @@ export const suppliers = pgTable("suppliers", {
   contactName: text("contact_name"),
   email: text("email"),
   phone: text("phone"),
+  /** Currency new POs to this supplier are raised in. */
+  currency: text("currency").notNull().default(HOME_CURRENCY),
   companyId: companyId(),
 }, (t) => [
   primaryKey({ columns: [t.companyId, t.id], name: "suppliers_pkey" }),
@@ -216,6 +222,10 @@ export const stockTransactions = pgTable("stock_transactions", {
   jobId: text("job_id"),
   assetId: text("asset_id"),
   poId: text("po_id"),
+  /** For purchases in another currency: what was paid per unit, and the rate used. */
+  currency: text("currency"),
+  originalUnitCost: numeric("original_unit_cost", { precision: 12, scale: 4 }),
+  exchangeRate: numeric("exchange_rate", { precision: 18, scale: 8 }),
   companyId: companyId(),
 }, (t) => [
   primaryKey({ columns: [t.companyId, t.id], name: "stock_transactions_pkey" }),
@@ -234,6 +244,9 @@ export const stockLots = pgTable("stock_lots", {
   quantityRemaining: integer("quantity_remaining").notNull(),
   unitCost: numeric("unit_cost", { precision: 12, scale: 4 }).notNull().default("0"),
   transactionId: text("transaction_id"),
+  currency: text("currency"),
+  originalUnitCost: numeric("original_unit_cost", { precision: 12, scale: 4 }),
+  exchangeRate: numeric("exchange_rate", { precision: 18, scale: 8 }),
   companyId: companyId(),
 }, (t) => [
   foreignKey({ name: "stock_lots_part_fk", columns: [t.companyId, t.partId], foreignColumns: [inventory.companyId, inventory.id] }),
@@ -256,15 +269,109 @@ export const stockTakes = pgTable("stock_takes", {
 
 export const purchaseOrders = pgTable("purchase_orders", {
   id: text("id").notNull(),
+  /** Supplier name at the time the PO was raised. */
   vendor: text("vendor").notNull(),
+  supplierId: text("supplier_id"),
   status: text("status").notNull().default("Draft"),
-  total: numeric("total", { precision: 10, scale: 2 }).notNull().default("0"),
+  /** Every PO has an explicit currency; amounts on the PO and its lines are in it. */
+  currency: text("currency").notNull().default(HOME_CURRENCY),
+  /** Ex-VAT total in the PO currency (sum of lines). */
+  total: numeric("total", { precision: 12, scale: 2 }).notNull().default("0"),
+  /** Home-currency units per 1 unit of the PO currency, fixed when submitted for approval. */
+  exchangeRate: numeric("exchange_rate", { precision: 18, scale: 8 }),
+  rateDate: date("rate_date"),
+  rateSource: text("rate_source"),
+  /** Total in the home currency at the submission rate: what approval limits are checked against. */
+  totalHome: numeric("total_home", { precision: 12, scale: 2 }),
   requestedBy: text("requested_by"),
   date: text("date"),
   items: integer("items").notNull().default(0),
+  jobId: text("job_id"),
+  expectedDate: date("expected_date"),
+  notes: text("notes"),
+  createdById: integer("created_by_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  submittedAt: timestamp("submitted_at", { withTimezone: true }),
+  approvedById: integer("approved_by_id"),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  sentById: integer("sent_by_id"),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  rejectionReason: text("rejection_reason"),
   companyId: companyId(),
 }, (t) => [
   primaryKey({ columns: [t.companyId, t.id], name: "purchase_orders_pkey" }),
+  foreignKey({ name: "purchase_orders_supplier_fk", columns: [t.companyId, t.supplierId], foreignColumns: [suppliers.companyId, suppliers.id] }),
+  foreignKey({ name: "purchase_orders_job_fk", columns: [t.companyId, t.jobId], foreignColumns: [jobs.companyId, jobs.id] }),
+]);
+
+export const purchaseOrderLines = pgTable("purchase_order_lines", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  poId: text("po_id").notNull(),
+  lineNo: integer("line_no").notNull(),
+  /** Null for non-stock items and services. */
+  partId: text("part_id"),
+  description: text("description").notNull(),
+  quantity: integer("quantity").notNull(),
+  /** Ex-VAT price per unit in the PO's currency. */
+  unitPrice: numeric("unit_price", { precision: 12, scale: 4 }).notNull(),
+  quantityReceived: integer("quantity_received").notNull().default(0),
+  quantityCancelled: integer("quantity_cancelled").notNull().default(0),
+  companyId: companyId(),
+}, (t) => [
+  foreignKey({ name: "purchase_order_lines_po_fk", columns: [t.companyId, t.poId], foreignColumns: [purchaseOrders.companyId, purchaseOrders.id] }).onDelete("cascade"),
+  foreignKey({ name: "purchase_order_lines_part_fk", columns: [t.companyId, t.partId], foreignColumns: [inventory.companyId, inventory.id] }),
+  unique("purchase_order_lines_po_line_key").on(t.companyId, t.poId, t.lineNo),
+]);
+
+/** One delivery booked in against a PO. */
+export const goodsReceipts = pgTable("goods_receipts", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  poId: text("po_id").notNull(),
+  receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+  receivedBy: text("received_by"),
+  deliveryNote: text("delivery_note"),
+  /** Home-currency units per 1 unit of the PO currency used to value this delivery. */
+  exchangeRate: numeric("exchange_rate", { precision: 18, scale: 8 }).notNull(),
+  rateDate: date("rate_date"),
+  rateSource: text("rate_source"),
+  companyId: companyId(),
+}, (t) => [
+  foreignKey({ name: "goods_receipts_po_fk", columns: [t.companyId, t.poId], foreignColumns: [purchaseOrders.companyId, purchaseOrders.id] }),
+]);
+
+export const goodsReceiptLines = pgTable("goods_receipt_lines", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  receiptId: integer("receipt_id").notNull().references(() => goodsReceipts.id, { onDelete: "cascade" }),
+  poLineId: integer("po_line_id").notNull().references(() => purchaseOrderLines.id),
+  quantity: integer("quantity").notNull(),
+  /** The stock movement it created (stock lines only). */
+  transactionId: text("transaction_id"),
+  companyId: companyId(),
+});
+
+/** Audit trail of everything done to a PO. */
+export const poEvents = pgTable("po_events", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  poId: text("po_id").notNull(),
+  at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+  userName: text("user_name"),
+  action: text("action").notNull(),
+  note: text("note"),
+  companyId: companyId(),
+}, (t) => [
+  foreignKey({ name: "po_events_po_fk", columns: [t.companyId, t.poId], foreignColumns: [purchaseOrders.companyId, purchaseOrders.id] }).onDelete("cascade"),
+  index("po_events_po_idx").on(t.companyId, t.poId, t.at),
+]);
+
+/** ECB daily reference rates (EUR-based), shared by all companies. */
+export const exchangeRates = pgTable("exchange_rates", {
+  rateDate: date("rate_date").notNull(),
+  currency: text("currency").notNull(),
+  /** Units of `currency` per 1 EUR. */
+  perEur: numeric("per_eur", { precision: 18, scale: 8 }).notNull(),
+  fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.rateDate, t.currency], name: "exchange_rates_pkey" }),
 ]);
 
 export const assetAudits = pgTable("asset_audits", {
@@ -309,6 +416,9 @@ export const PRIVILEGED_ROLES = ["Manager", "Admin", PLATFORM_ADMIN_ROLE] as con
 export const USER_ROLES = ["Manager", "Admin", "Lead", "Technician"] as const;
 
 export const insertUserSchema = createInsertSchema(users, {
+  poApprovalLimit: () => z.union([z.number(), z.string()]).transform((v) => Number(v))
+    .refine((n) => Number.isFinite(n) && n >= 0 && n <= 999_999_999_999, "Approval limit must be 0 or more")
+    .transform((n) => n.toFixed(2)).nullable().optional(),
   name: (s) => s.trim().min(1).max(200),
   role: () => z.enum(USER_ROLES).optional(),
   email: () => z.string().trim().toLowerCase().email().max(320).nullable().optional(),
@@ -330,6 +440,7 @@ export const insertInventorySchema = createInsertSchema(inventory, {
   reorderQty: (s) => s.int().min(0).nullable().optional(),
 }).omit({ companyId: true });
 export const insertSupplierSchema = createInsertSchema(suppliers, {
+  currency: () => z.enum(CURRENCIES).optional(),
   rating: () => numericInput.nullable().optional(),
   leadTimeDays: (s) => s.int().min(0).nullable().optional(),
   email: () => z.string().trim().toLowerCase().email().max(320).nullable().optional().or(z.literal("")),
@@ -366,6 +477,48 @@ export type StockTakeInput = z.infer<typeof stockTakeSchema>;
 export const insertPurchaseOrderSchema = createInsertSchema(purchaseOrders, {
   total: () => numericInput.optional(),
 }).omit({ companyId: true });
+
+const money4 = z.union([z.number(), z.string()]).transform((v) => Number(String(v).replace(/[£€$,\s]/g, "")))
+  .refine((n) => Number.isFinite(n) && n >= 0 && n < 100_000_000, "Price must be 0 or more");
+
+/** A PO as the user edits it (Draft/Rejected). The server numbers it and works out totals. */
+export const poDraftSchema = z.object({
+  supplierId: z.string().trim().min(1).max(50),
+  currency: z.enum(CURRENCIES).optional(),
+  jobId: z.string().trim().min(1).max(50).optional().nullable(),
+  expectedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD").optional().nullable(),
+  notes: z.string().trim().max(2000).optional().nullable(),
+  lines: z.array(z.object({
+    partId: z.string().trim().min(1).max(50).optional().nullable(),
+    description: z.string().trim().max(300).optional().nullable(),
+    quantity: z.number().int().min(1).max(1_000_000),
+    unitPrice: money4,
+  }).strict()).min(1, "Add at least one line").max(200),
+}).strict();
+export type PoDraftInput = z.infer<typeof poDraftSchema>;
+
+export const poActionSchema = z.object({
+  note: z.string().trim().max(1000).optional().nullable(),
+  /** Manager/Admin only: home-currency units per 1 unit of the PO currency. */
+  exchangeRate: z.number().positive().max(1_000_000).optional().nullable(),
+}).strict();
+
+export const goodsReceiptSchema = z.object({
+  deliveryNote: z.string().trim().max(200).optional().nullable(),
+  exchangeRate: z.number().positive().max(1_000_000).optional().nullable(),
+  lines: z.array(z.object({
+    lineId: z.number().int().positive(),
+    quantity: z.number().int().min(1).max(1_000_000),
+  }).strict()).min(1, "Enter at least one received quantity").max(200),
+}).strict();
+export type GoodsReceiptInput = z.infer<typeof goodsReceiptSchema>;
+
+export const reorderCreateSchema = z.object({
+  items: z.array(z.object({
+    partId: z.string().trim().min(1).max(50),
+    quantity: z.number().int().min(1).max(1_000_000),
+  }).strict()).min(1).max(1000),
+}).strict();
 export const insertAssetAuditSchema = createInsertSchema(assetAudits).omit({ companyId: true });
 export const insertMaintenanceRequestSchema = createInsertSchema(maintenanceRequests).omit({ companyId: true });
 
@@ -452,6 +605,10 @@ export type Job = typeof jobs.$inferSelect;
 export type Template = typeof templates.$inferSelect;
 export type StockTransaction = typeof stockTransactions.$inferSelect;
 export type StockLot = typeof stockLots.$inferSelect;
+export type PurchaseOrderLine = typeof purchaseOrderLines.$inferSelect;
+export type GoodsReceipt = typeof goodsReceipts.$inferSelect;
+export type GoodsReceiptLine = typeof goodsReceiptLines.$inferSelect;
+export type PoEvent = typeof poEvents.$inferSelect;
 export type StockTake = typeof stockTakes.$inferSelect;
 export type PurchaseOrder = typeof purchaseOrders.$inferSelect;
 export type AssetAudit = typeof assetAudits.$inferSelect;

@@ -1,4 +1,6 @@
 import Layout from "@/components/Layout";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CURRENCIES, HOME_CURRENCY, currencySymbol } from "@shared/constants";
 import { useSuppliers, useCreateMutation, useUpdateMutation, useDeleteMutation } from "@/hooks/use-data";
 import { 
   Card, 
@@ -63,12 +65,14 @@ function SupplierDialog({
   const [contactName, setContactName] = useState(supplier?.contactName ?? "");
   const [email, setEmail] = useState(supplier?.email ?? "");
   const [phone, setPhone] = useState(supplier?.phone ?? "");
+  const [currency, setCurrency] = useState<string>(supplier?.currency ?? HOME_CURRENCY);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const data: any = {
       name,
       categories: categories.split(",").map(c => c.trim()).filter(Boolean),
+      currency,
       rating: rating === "" ? null : rating,
       leadTimeDays: leadTimeDays.trim() === "" ? null : Math.max(0, parseInt(leadTimeDays, 10) || 0),
       contactName: contactName.trim() || null,
@@ -112,6 +116,16 @@ function SupplierDialog({
               onChange={e => setName(e.target.value)} 
               required 
             />
+          </div>
+          <div className="space-y-2">
+            <Label>Purchase currency</Label>
+            <Select value={currency} onValueChange={setCurrency}>
+              <SelectTrigger data-testid="select-supplier-currency"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {CURRENCIES.map(c => <SelectItem key={c} value={c}>{c} ({currencySymbol(c).trim()}){c === HOME_CURRENCY ? " · home currency" : ""}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">New purchase orders to this supplier are raised in this currency.</p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="supplier-categories">Categories (comma-separated)</Label>
@@ -358,7 +372,8 @@ export default function Suppliers() {
                   <p className="text-xs text-muted-foreground flex items-center">
                     <Star className="mr-1.5 size-3 text-yellow-500 fill-yellow-500" /> Rating
                   </p>
-                  <p className="text-sm font-medium" data-testid={`text-supplier-rating-${supplier.id}`}>{supplier.rating} / 5.0</p>
+                  <p className="text-sm font-medium" data-testid={`text-supplier-rating-${supplier.id}`}>{supplier.rating ?? "—"} / 5.0</p>
+                  <p className="text-xs text-muted-foreground pt-1">Currency: <span className="font-medium text-foreground">{supplier.currency} ({currencySymbol(supplier.currency).trim()})</span></p>
                 </div>
                 <div className="space-y-1 text-right">
                   <p className="text-xs text-muted-foreground flex items-center justify-end">

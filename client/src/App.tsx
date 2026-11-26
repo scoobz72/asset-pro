@@ -15,6 +15,8 @@ import Inventory from "@/pages/inventory";
 import Suppliers from "@/pages/suppliers";
 import Transactions from "@/pages/transactions";
 import PurchaseOrders from "@/pages/purchase-orders";
+import PurchaseOrderPage from "@/pages/purchase-order";
+import PurchaseOrderPrint from "@/pages/purchase-order-print";
 import Calendar from "@/pages/calendar";
 import Team from "@/pages/team";
 import Reports from "@/pages/reports";
@@ -38,6 +40,8 @@ function Router({ defaultLandingPage, setDefaultLandingPage, isPlatformAdmin }: 
       <Route path="/inventory" component={Inventory} />
       <Route path="/stock-take" component={StockTake} />
       <Route path="/suppliers" component={Suppliers} />
+      <Route path="/purchase-orders/:id/print" component={PurchaseOrderPrint} />
+      <Route path="/purchase-orders/:id" component={PurchaseOrderPage} />
       <Route path="/purchase-orders" component={PurchaseOrders} />
       <Route path="/transactions" component={Transactions} />
       <Route path="/calendar" component={Calendar} />

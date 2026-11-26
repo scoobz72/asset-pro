@@ -3,7 +3,7 @@
  * parser and the validator are all built from this one file, so they can't drift apart.
  * See docs/data-import-plan.md section 3.
  */
-import { LOCATION_TYPES, ASSET_STATUSES, CRITICALITIES, PART_UNITS } from "@shared/constants";
+import { LOCATION_TYPES, ASSET_STATUSES, CRITICALITIES, PART_UNITS, CURRENCIES } from "@shared/constants";
 import { USER_ROLES } from "@shared/schema";
 
 export type Kind =
@@ -106,6 +106,7 @@ export const TABS: TabSpec[] = [
       { header: "Phone", key: "phone", kind: "text", max: 40, note: "Optional", width: 16 },
       { header: "Lead Time (days)", key: "leadTimeDays", kind: "int", note: "Whole days", width: 14 },
       { header: "Rating (0–5)", key: "rating", kind: "rating", note: "0 to 5", width: 12 },
+      { header: "Currency", key: "currency", kind: "list", list: CURRENCIES, note: "Purchase currency (default GBP)", width: 10 },
     ],
   },
   {

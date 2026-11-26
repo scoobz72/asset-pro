@@ -1,328 +1,273 @@
 import Layout from "@/components/Layout";
-import { usePurchaseOrders, useSuppliers, useInventory } from "@/hooks/use-data";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useMutation } from "@tanstack/react-query";
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from "@/components/ui/table";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogDescription, 
-  DialogFooter, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogTrigger 
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from "@/components/ui/select";
-import { 
-  Search, 
-  Plus, 
-  FileText,
-  CheckCircle2,
-  MoreHorizontal,
-  Clock,
-  Ban,
-  Building2,
-  ShieldAlert
-} from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Loader2, Plus, Search, RefreshCcw, ShoppingCart } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+import { HOME_CURRENCY, formatMoney } from "@shared/constants";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { useState } from "react";
-import { cn } from "@/lib/utils";
+  PoStatusBadge, CurrencyTag, MoneyPair, PoEditorDialog, formatDate, errorMessage, invalidatePurchasing,
+  type PoSummary,
+} from "@/components/po";
 
-type UserRole = "Admin" | "Manager" | "Lead";
+const VIEWS = {
+  open: { label: "Open", statuses: ["Draft", "Pending Approval", "Approved", "Rejected", "Sent", "Partially Received"] },
+  approval: { label: "Awaiting approval", statuses: ["Pending Approval"] },
+  delivery: { label: "Awaiting delivery", statuses: ["Sent", "Partially Received"] },
+  done: { label: "Completed", statuses: ["Received", "Closed", "Cancelled"] },
+  all: { label: "All", statuses: null },
+} as const;
+type View = keyof typeof VIEWS;
 
-export default function PurchaseOrders() {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [currentUserRole, setCurrentUserRole] = useState<UserRole>("Admin");
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [selectedVendor, setSelectedVendor] = useState("");
+type Suggestion = {
+  partId: string; name: string; unit: string; stock: number; onOrder: number; minStock: number; reorderQty: number | null;
+  suggestedQty: number; supplierId: string | null; supplierName: string | null; currency: string;
+  unitCostHome: number | null; unitPrice: number | null; leadTime: number | null;
+};
 
-  const { data: purchaseOrders, isLoading } = usePurchaseOrders();
-  const { data: suppliers } = useSuppliers();
+function ReorderDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (o: boolean) => void; onCreated: (ids: string[]) => void }) {
+  const { toast } = useToast();
+  const { data = [], isLoading } = useQuery<Suggestion[]>({ queryKey: ["/api/purchasing/reorder"], enabled: open, staleTime: 0 });
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [qty, setQty] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
 
-  const createPOMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const res = await apiRequest("POST", "/api/purchase-orders", data);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders"] });
-      setDialogOpen(false);
-      setSelectedVendor("");
-    },
-  });
-
-  const updatePOMutation = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const res = await apiRequest("PATCH", `/api/purchase-orders/${id}`, { status });
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders"] });
-    },
-  });
-
-  const poList = (purchaseOrders as any[] || []);
-  const supplierList = (suppliers as any[] || []);
-
-  const filteredPOs = poList.filter((po: any) => 
-    (po.vendor || "").toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (po.id || "").toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const canCreatePO = currentUserRole === "Admin" || currentUserRole === "Lead";
-  const canApprovePO = currentUserRole === "Admin" || currentUserRole === "Manager";
-
-  const handleCreatePO = () => {
-    if (!selectedVendor) return;
-    const vendor = supplierList.find((s: any) => s.id === selectedVendor);
-    const newId = `PO-${Date.now()}`;
-    createPOMutation.mutate({
-      id: newId,
-      vendor: vendor?.name || selectedVendor,
-      status: "Pending Approval",
-      total: "0",
-      requestedBy: currentUserRole + " User",
-      date: new Date().toISOString().split("T")[0],
-      items: 0,
-    });
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "Draft":
-        return <Badge variant="outline" className="text-slate-600 bg-slate-50 border-slate-200"><FileText className="mr-1 size-3" /> Draft</Badge>;
-      case "Pending Approval":
-        return <Badge variant="outline" className="text-yellow-600 bg-yellow-50 border-yellow-200"><Clock className="mr-1 size-3" /> Pending</Badge>;
-      case "Approved":
-        return <Badge variant="outline" className="text-blue-600 bg-blue-50 border-blue-200"><CheckCircle2 className="mr-1 size-3" /> Approved</Badge>;
-      case "Received":
-        return <Badge variant="outline" className="text-green-600 bg-green-50 border-green-200"><BoxIcon className="mr-1 size-3" /> Received</Badge>;
-      case "Rejected":
-        return <Badge variant="outline" className="text-red-600 bg-red-50 border-red-200"><Ban className="mr-1 size-3" /> Rejected</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
+  const chosen = data.filter((s) => selected[s.partId] ?? !!s.supplierId);
+  const create = async () => {
+    setSaving(true);
+    try {
+      const items = chosen.map((s) => ({ partId: s.partId, quantity: Math.max(1, parseInt(qty[s.partId] ?? String(s.suggestedQty), 10) || 1) }));
+      const res = await apiRequest("POST", "/api/purchasing/reorder", { items });
+      const { created } = await res.json();
+      invalidatePurchasing();
+      toast({ title: `${created.length} draft PO${created.length === 1 ? "" : "s"} created`, description: created.join(", ") });
+      onCreated(created);
+      onOpenChange(false);
+    } catch (err) {
+      toast({ title: "Couldn't create POs", description: errorMessage(err), variant: "destructive" });
+    } finally {
+      setSaving(false);
     }
   };
 
-  const BoxIcon = ({ className }: { className?: string }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
-  );
+  const groups = useMemo(() => {
+    const m = new Map<string, Suggestion[]>();
+    for (const s of data) {
+      const k = s.supplierName ? `${s.supplierName} · ${s.currency}` : "No primary supplier";
+      if (!m.has(k)) m.set(k, []);
+      m.get(k)!.push(s);
+    }
+    return Array.from(m);
+  }, [data]);
 
-  if (isLoading) {
-    return (
-      <Layout>
-        <div className="flex items-center justify-center h-64">
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </Layout>
-    );
-  }
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[960px] max-h-[92vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Reorder suggestions</DialogTitle>
+          <DialogDescription>
+            Parts at or below minimum stock, after counting what's already on order. Selected lines become one draft PO per
+            supplier, in that supplier's currency, priced from the part's unit cost.
+          </DialogDescription>
+        </DialogHeader>
+        {isLoading ? (
+          <div className="flex justify-center py-10"><Loader2 className="size-6 animate-spin text-muted-foreground" /></div>
+        ) : data.length === 0 ? (
+          <p className="py-10 text-center text-muted-foreground">Nothing needs reordering. Every part is above its minimum stock, counting what's on order.</p>
+        ) : (
+          <div className="space-y-4">
+            {groups.map(([group, items]) => (
+              <div key={group} className="border rounded-md overflow-hidden">
+                <div className="bg-muted/40 px-3 py-2 text-sm font-semibold">{group}</div>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-8" />
+                      <TableHead>Part</TableHead>
+                      <TableHead className="text-right">Stock</TableHead>
+                      <TableHead className="text-right">On order</TableHead>
+                      <TableHead className="text-right">Min</TableHead>
+                      <TableHead className="text-right w-24">Order qty</TableHead>
+                      <TableHead className="text-right">Unit price</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {items.map((s) => {
+                      const checked = selected[s.partId] ?? !!s.supplierId;
+                      return (
+                        <TableRow key={s.partId}>
+                          <TableCell>
+                            <Checkbox checked={checked} disabled={!s.supplierId} aria-label={`Order ${s.name}`}
+                              onCheckedChange={(v) => setSelected((x) => ({ ...x, [s.partId]: !!v }))} />
+                          </TableCell>
+                          <TableCell>
+                            <div className="font-medium text-sm">{s.name}</div>
+                            <div className="text-xs text-muted-foreground font-mono">{s.partId}</div>
+                            {!s.supplierId && <div className="text-xs text-destructive">Set a primary supplier on the part to order it here.</div>}
+                          </TableCell>
+                          <TableCell className="text-right">{s.stock} {s.unit}</TableCell>
+                          <TableCell className="text-right">{s.onOrder}</TableCell>
+                          <TableCell className="text-right">{s.minStock}</TableCell>
+                          <TableCell>
+                            <Input className="h-8 text-right" type="number" min={1} value={qty[s.partId] ?? String(s.suggestedQty)}
+                              onChange={(e) => setQty((x) => ({ ...x, [s.partId]: e.target.value }))} disabled={!checked} />
+                          </TableCell>
+                          <TableCell className="text-right text-sm whitespace-nowrap">
+                            {s.unitPrice === null ? <span className="text-muted-foreground">set on PO</span> : formatMoney(s.unitPrice, s.currency)}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            ))}
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
+          <Button onClick={create} disabled={saving || chosen.length === 0} data-testid="button-create-reorder-pos">
+            {saving && <Loader2 className="mr-2 size-4 animate-spin" />}
+            Create draft PO{chosen.length === 1 ? "" : "s"} ({chosen.length} line{chosen.length === 1 ? "" : "s"})
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export default function PurchaseOrders() {
+  const [, navigate] = useLocation();
+  const [view, setView] = useState<View>("open");
+  const [search, setSearch] = useState("");
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [reorderOpen, setReorderOpen] = useState(false);
+  const { data = [], isLoading } = useQuery<PoSummary[]>({ queryKey: ["/api/purchase-orders"] });
+
+  const filtered = useMemo(() => {
+    const statuses = VIEWS[view].statuses as readonly string[] | null;
+    const q = search.trim().toLowerCase();
+    return data
+      .filter((po) => !statuses || statuses.includes(po.status))
+      .filter((po) => !q || [po.id, po.vendor, po.jobId, po.requestedBy, po.currency].some((v) => (v ?? "").toLowerCase().includes(q)));
+  }, [data, view, search]);
+
+  const counts = useMemo(() => Object.fromEntries((Object.keys(VIEWS) as View[]).map((v) => {
+    const st = VIEWS[v].statuses as readonly string[] | null;
+    return [v, st ? data.filter((po) => st.includes(po.status)).length : data.length];
+  })), [data]);
+
+  // Totals by currency: amounts in different currencies are never added together.
+  const openByCurrency = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const po of data.filter((p) => (VIEWS.open.statuses as readonly string[]).includes(p.status))) {
+      m.set(po.currency, (m.get(po.currency) ?? 0) + Number(po.total));
+    }
+    return Array.from(m);
+  }, [data]);
 
   return (
     <Layout>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Purchase Orders</h1>
-          <p className="text-muted-foreground mt-1">Manage vendor orders and approvals.</p>
+          <p className="text-muted-foreground mt-1">Raise, approve, send and receive orders. Every amount shows its currency.</p>
         </div>
-        
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 bg-muted/50 p-1.5 rounded-lg border">
-            <span className="text-xs font-medium text-muted-foreground ml-2">Simulate Role:</span>
-            <Select value={currentUserRole} onValueChange={(v) => setCurrentUserRole(v as UserRole)}>
-              <SelectTrigger className="h-8 w-[120px] text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Admin">Admin</SelectItem>
-                <SelectItem value="Manager">Manager</SelectItem>
-                <SelectItem value="Lead">Lead User</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button disabled={!canCreatePO} className={cn(!canCreatePO && "opacity-50 cursor-not-allowed")}>
-                <Plus className="mr-2 size-4" />
-                Raise PO
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
-              <DialogHeader>
-                <DialogTitle>Raise Purchase Order</DialogTitle>
-                <DialogDescription>
-                  Create a new purchase order request. It will require manager approval.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                {!canCreatePO && (
-                  <div className="bg-red-50 text-red-600 p-3 rounded-md flex items-start gap-2 text-sm border border-red-200 mb-2">
-                    <ShieldAlert className="size-4 mt-0.5 shrink-0" />
-                    <p>Your current role ({currentUserRole}) does not have permission to create purchase orders.</p>
-                  </div>
-                )}
-                <div className="grid gap-2">
-                  <Label htmlFor="vendor">Vendor</Label>
-                  <Select disabled={!canCreatePO} value={selectedVendor} onValueChange={setSelectedVendor}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select vendor..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {supplierList.map((s: any) => (
-                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="items">Order Items</Label>
-                  <div className="border rounded-md p-4 bg-muted/20 flex flex-col items-center justify-center text-muted-foreground h-32">
-                    <Button variant="outline" size="sm" disabled={!canCreatePO}>
-                      <Plus className="mr-2 size-3" /> Add Item from Inventory
-                    </Button>
-                  </div>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setDialogOpen(false)}>Save Draft</Button>
-                <Button 
-                  type="submit" 
-                  disabled={!canCreatePO || !selectedVendor || createPOMutation.isPending}
-                  onClick={handleCreatePO}
-                >
-                  {createPOMutation.isPending ? "Submitting..." : "Submit for Approval"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setReorderOpen(true)} data-testid="button-reorder">
+            <RefreshCcw className="mr-2 size-4" /> Reorder suggestions
+          </Button>
+          <Button onClick={() => setEditorOpen(true)} data-testid="button-new-po">
+            <Plus className="mr-2 size-4" /> New PO
+          </Button>
         </div>
       </div>
 
-      <div className="flex items-center py-4 gap-2">
-        <div className="relative max-w-sm flex-1">
+      <div className="grid gap-4 sm:grid-cols-3 my-4">
+        <Card><CardContent className="p-4">
+          <p className="text-xs text-muted-foreground">Awaiting approval</p>
+          <p className="text-2xl font-bold">{counts.approval ?? 0}</p>
+        </CardContent></Card>
+        <Card><CardContent className="p-4">
+          <p className="text-xs text-muted-foreground">Awaiting delivery</p>
+          <p className="text-2xl font-bold">{counts.delivery ?? 0}</p>
+        </CardContent></Card>
+        <Card><CardContent className="p-4">
+          <p className="text-xs text-muted-foreground">Open value (ex-VAT, by currency)</p>
+          {openByCurrency.length === 0 ? <p className="text-2xl font-bold">—</p> : openByCurrency.map(([cur, sum]) => (
+            <p key={cur} className="text-lg font-bold leading-tight">{formatMoney(sum, cur)}</p>
+          ))}
+        </CardContent></Card>
+      </div>
+
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-4">
+        <Tabs value={view} onValueChange={(v) => setView(v as View)}>
+          <TabsList className="flex-wrap h-auto">
+            {(Object.keys(VIEWS) as View[]).map((v) => (
+              <TabsTrigger key={v} value={v} data-testid={`tab-po-${v}`}>{VIEWS[v].label} ({counts[v] ?? 0})</TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+        <div className="relative w-full lg:w-72">
           <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-          <Input 
-            placeholder="Search POs, Vendors..." 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9" 
-          />
+          <Input className="pl-9" placeholder="Search PO, supplier, job…" value={search} onChange={(e) => setSearch(e.target.value)} data-testid="input-search-po" />
         </div>
       </div>
 
-      <div className="rounded-md border bg-card">
+      <div className="rounded-md border bg-card overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[120px]">PO Number</TableHead>
-              <TableHead>Date</TableHead>
-              <TableHead>Vendor</TableHead>
-              <TableHead>Requested By</TableHead>
-              <TableHead className="text-right">Items</TableHead>
-              <TableHead className="text-right">Total</TableHead>
+              <TableHead>PO</TableHead>
+              <TableHead>Supplier</TableHead>
+              <TableHead>Currency</TableHead>
+              <TableHead className="text-right">Total (ex-VAT)</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead className="hidden md:table-cell">Delivery</TableHead>
+              <TableHead className="hidden lg:table-cell">Job</TableHead>
+              <TableHead className="hidden lg:table-cell">Raised</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredPOs.map((po: any) => (
-              <TableRow key={po.id}>
-                <TableCell className="font-medium font-mono text-xs">
-                  {po.id}
+            {isLoading ? (
+              <TableRow><TableCell colSpan={8} className="h-24 text-center"><Loader2 className="inline size-5 animate-spin text-muted-foreground" /></TableCell></TableRow>
+            ) : filtered.length === 0 ? (
+              <TableRow><TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                <ShoppingCart className="inline mr-2 size-4" /> No purchase orders here.
+              </TableCell></TableRow>
+            ) : filtered.map((po) => (
+              <TableRow key={po.id} className="cursor-pointer" onClick={() => navigate(`/purchase-orders/${encodeURIComponent(po.id)}`)} data-testid={`row-po-${po.id}`}>
+                <TableCell className="font-mono text-sm font-medium">{po.id}</TableCell>
+                <TableCell className="text-sm">{po.vendor}</TableCell>
+                <TableCell><CurrencyTag currency={po.currency} /></TableCell>
+                <TableCell className="text-right text-sm">
+                  <MoneyPair amount={po.total} currency={po.currency} homeAmount={po.currency === HOME_CURRENCY ? null : po.totalHome} />
                 </TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {po.date}
+                <TableCell><PoStatusBadge status={po.status} /></TableCell>
+                <TableCell className="hidden md:table-cell text-sm">
+                  {po.ordered ? <>{po.received ?? 0} of {po.ordered} received</> : <span className="text-muted-foreground">—</span>}
                 </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <Building2 className="size-4 text-muted-foreground" />
-                    <span className="font-medium">{po.vendor}</span>
-                  </div>
-                </TableCell>
-                <TableCell className="text-sm">
-                  {po.requestedBy}
-                </TableCell>
-                <TableCell className="text-right text-sm text-muted-foreground">
-                  {po.items}
-                </TableCell>
-                <TableCell className="text-right font-medium">
-                  ${parseFloat(po.total || "0").toFixed(2)}
-                </TableCell>
-                <TableCell>
-                  {getStatusBadge(po.status)}
-                </TableCell>
-                <TableCell className="text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreHorizontal className="size-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuLabel>PO Actions</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem><FileText className="mr-2 size-4" /> View Details</DropdownMenuItem>
-                      
-                      {po.status === "Pending Approval" && (
-                        <>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem 
-                            disabled={!canApprovePO} 
-                            className={cn("text-green-600 focus:text-green-600", !canApprovePO && "opacity-50")}
-                            onClick={() => canApprovePO && updatePOMutation.mutate({ id: po.id, status: "Approved" })}
-                          >
-                            <CheckCircle2 className="mr-2 size-4" /> Approve Order
-                            {!canApprovePO && <span className="ml-2 text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">Admin/Mgr Only</span>}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            disabled={!canApprovePO} 
-                            className={cn("text-red-600 focus:text-red-600", !canApprovePO && "opacity-50")}
-                            onClick={() => canApprovePO && updatePOMutation.mutate({ id: po.id, status: "Rejected" })}
-                          >
-                            <Ban className="mr-2 size-4" /> Reject
-                          </DropdownMenuItem>
-                        </>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                <TableCell className="hidden lg:table-cell font-mono text-xs">{po.jobId ?? "—"}</TableCell>
+                <TableCell className="hidden lg:table-cell text-sm">
+                  {formatDate(po.createdAt ?? po.date)}
+                  <div className="text-xs text-muted-foreground">{po.requestedBy ?? ""}</div>
                 </TableCell>
               </TableRow>
             ))}
-            {filteredPOs.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
-                  No purchase orders found.
-                </TableCell>
-              </TableRow>
-            )}
           </TableBody>
         </Table>
       </div>
+
+      <PoEditorDialog open={editorOpen} onOpenChange={setEditorOpen} onSaved={(id) => navigate(`/purchase-orders/${encodeURIComponent(id)}`)} />
+      <ReorderDialog open={reorderOpen} onOpenChange={setReorderOpen} onCreated={(ids) => { if (ids.length === 1) navigate(`/purchase-orders/${encodeURIComponent(ids[0])}`); else setView("open"); }} />
     </Layout>
   );
 }

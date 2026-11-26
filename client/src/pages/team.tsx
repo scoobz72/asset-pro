@@ -22,7 +22,18 @@ import { Mail, MoreVertical, Plus } from "lucide-react";
 
 const ROLES = ["Manager", "Admin", "Lead", "Technician"];
 
-type TeamUser = { id: number; name: string; role: string; status: string; avatar: string | null; email: string | null };
+type TeamUser = { id: number; name: string; role: string; status: string; avatar: string | null; email: string | null; poApprovalLimit: string | null };
+
+/** Stored as the largest value the column holds; shown as "Unlimited". */
+const UNLIMITED = 999999999999.99;
+type LimitMode = "none" | "amount" | "unlimited";
+const limitMode = (v: string | null): LimitMode => v === null ? "none" : Number(v) >= UNLIMITED ? "unlimited" : "amount";
+export function approvalLimitText(v: string | null): string {
+  const mode = limitMode(v);
+  if (mode === "none") return "No PO approval";
+  if (mode === "unlimited") return "Approves POs: unlimited";
+  return `Approves POs up to £${Number(v).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} GBP`;
+}
 
 function errorText(err: unknown): string {
   const msg = err instanceof Error ? err.message : "";
@@ -107,12 +118,16 @@ function EditMemberDialog({ user, onClose }: { user: TeamUser | null; onClose: (
   const [role, setRole] = useState("Technician");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<LimitMode>("none");
+  const [amount, setAmount] = useState("");
 
   useEffect(() => {
     if (user) {
       setRole(user.role);
       setPassword("");
       setError(null);
+      setMode(limitMode(user.poApprovalLimit));
+      setAmount(limitMode(user.poApprovalLimit) === "amount" ? Number(user.poApprovalLimit).toFixed(2) : "");
     }
   }, [user]);
 
@@ -122,9 +137,15 @@ function EditMemberDialog({ user, onClose }: { user: TeamUser | null; onClose: (
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    const data: Record<string, string> = {};
+    const data: Record<string, string | number | null> = {};
     if (!isPlatformAdmin && role !== user.role) data.role = role;
     if (password) data.password = password;
+    const limit = mode === "none" ? null : mode === "unlimited" ? UNLIMITED : Number(amount.replace(/[£,\s]/g, ""));
+    if (mode === "amount" && (!Number.isFinite(limit) || (limit as number) < 0)) {
+      return setError("Enter the approval limit as an amount in GBP, e.g. 2500.");
+    }
+    const current = user.poApprovalLimit === null ? null : Number(user.poApprovalLimit);
+    if (limit !== current) data.poApprovalLimit = limit;
     if (Object.keys(data).length === 0) return onClose();
     update.mutate({ id: user.id, data }, {
       onSuccess: () => {
@@ -140,7 +161,7 @@ function EditMemberDialog({ user, onClose }: { user: TeamUser | null; onClose: (
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{user.name}</DialogTitle>
-          <DialogDescription>Change their role or set a new temporary password.</DialogDescription>
+          <DialogDescription>Change their role, PO approval limit or password.</DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
           {!isPlatformAdmin && (
@@ -154,6 +175,27 @@ function EditMemberDialog({ user, onClose }: { user: TeamUser | null; onClose: (
               </Select>
             </div>
           )}
+          <div className="space-y-2">
+            <Label>Purchase order approval (GBP, ex-VAT)</Label>
+            <div className="flex gap-2">
+              <Select value={mode} onValueChange={(v) => setMode(v as LimitMode)}>
+                <SelectTrigger className="w-44" data-testid="select-approval-mode"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Can't approve</SelectItem>
+                  <SelectItem value="amount">Up to a limit</SelectItem>
+                  <SelectItem value="unlimited">Unlimited</SelectItem>
+                </SelectContent>
+              </Select>
+              {mode === "amount" && (
+                <div className="relative flex-1">
+                  <span className="absolute left-3 top-2 text-sm text-muted-foreground">£</span>
+                  <Input className="pl-7 pr-12" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="2500.00" data-testid="input-approval-limit" />
+                  <span className="absolute right-3 top-2 text-xs text-muted-foreground">GBP</span>
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">Nobody can approve a PO they raised themselves.</p>
+          </div>
           <div className="space-y-2">
             <Label htmlFor="e-pass">New password (leave blank to keep the current one)</Label>
             <Input id="e-pass" type="text" minLength={8} maxLength={200} autoComplete="off" value={password}
@@ -213,6 +255,7 @@ export default function Team() {
               <div className="flex-1">
                 <CardTitle className="text-lg">{user.name}</CardTitle>
                 <CardDescription>{user.role === PLATFORM_ADMIN_ROLE ? "Platform admin" : user.role}</CardDescription>
+                <p className="text-xs text-muted-foreground mt-0.5" data-testid={`text-approval-${user.id}`}>{approvalLimitText(user.poApprovalLimit)}</p>
               </div>
               {canManage && (
                 <DropdownMenu>
@@ -222,7 +265,7 @@ export default function Team() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => setEditing(user)}>Edit role / reset password</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setEditing(user)}>Edit role, approval limit or password</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
