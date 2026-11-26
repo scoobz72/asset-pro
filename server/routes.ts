@@ -1,8 +1,13 @@
-import type { Express, Request, Response } from "express";
+import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import { type Server } from "http";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
 import { storage } from "./storage";
+import { previewImport, commitImport, ImportInvalidError } from "./import/commit";
+import { ImportFileError } from "./import/parse";
+import { buildWorkbook, XLSX_MIME } from "./import/template";
+import { exampleRows } from "./import/example";
+import { MAX_FILE_BYTES } from "./import/spec";
 import { isPrivileged, requirePrivileged, requirePlatformAdmin, companyOf } from "./auth";
 import {
   insertUserSchema, updateUserSchema,
@@ -54,6 +59,48 @@ function parseUserId(req: Request, res: Response): number | undefined {
     return undefined;
   }
   return id;
+}
+
+/**
+ * Reads the request body as raw bytes for the Excel import only (the global JSON parser
+ * keeps its small limit). Oversize uploads get a plain message instead of a generic 413.
+ */
+const rawXlsx = express.raw({ type: () => true, limit: MAX_FILE_BYTES });
+function xlsxBody(req: Request, res: Response, next: NextFunction) {
+  rawXlsx(req, res, (err?: any) => {
+    if (!err) return next();
+    const tooBig = err.status === 413 || err.type === "entity.too.large";
+    res.status(tooBig ? 413 : 400).json({ message: tooBig ? "The file is larger than 5 MB." : "The upload couldn't be read." });
+  });
+}
+
+function sendWorkbook(res: Response, buf: Buffer, filename: string) {
+  res.setHeader("Content-Type", XLSX_MIME);
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.setHeader("Cache-Control", "no-store");
+  res.send(buf);
+}
+
+/** Runs a preview or commit, turning file and validation problems into client errors. */
+async function runImport(req: Request, res: Response, fn: typeof previewImport) {
+  const body = req.body;
+  if (!Buffer.isBuffer(body) || body.length === 0) {
+    return res.status(400).json({ message: "Choose an .xlsx file to upload." });
+  }
+  const companyId = companyOf(req);
+  const importer = { id: req.user!.id, name: req.user!.name };
+  try {
+    const result = await fn(body, companyId, importer);
+    if (fn === commitImport) {
+      const counts = result.summary.map((s) => `${s.key}:+${s.new}/~${s.updated}`).join(" ");
+      console.log(`[import] company=${companyId} user=${importer.id} ${counts} stock=${result.stockAdjustments}`);
+    }
+    res.json(result);
+  } catch (err) {
+    if (err instanceof ImportFileError) return res.status(400).json({ message: err.message });
+    if (err instanceof ImportInvalidError) return res.status(422).json(err.result);
+    throw err;
+  }
 }
 
 // Purchase-order decisions that only Managers/Admins may make.
@@ -180,6 +227,17 @@ export async function registerRoutes(
     await storage.deleteBin(companyOf(req), String(req.params.id));
     res.status(204).end();
   });
+
+  // ===== EXCEL IMPORT (Managers/Admins; docs/data-import-plan.md section 3) =====
+  // requirePrivileged runs before the body is read, so other users can't upload 5 MB.
+  app.get("/api/import/template", requirePrivileged, async (_req, res) => {
+    sendWorkbook(res, await buildWorkbook(), "myCMMS-import-template.xlsx");
+  });
+  app.get("/api/import/example", requirePrivileged, async (req, res) => {
+    sendWorkbook(res, await buildWorkbook(exampleRows(companyOf(req))), "myCMMS-example-food-site.xlsx");
+  });
+  app.post("/api/import/preview", requirePrivileged, xlsxBody, (req, res) => runImport(req, res, previewImport));
+  app.post("/api/import/commit", requirePrivileged, xlsxBody, (req, res) => runImport(req, res, commitImport));
 
   // ===== DASHBOARD =====
   app.get("/api/dashboard/summary", async (req, res) => {
