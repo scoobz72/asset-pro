@@ -93,21 +93,36 @@ export async function calendarItems(companyId: number, viewer: Viewer, from: str
     }
   }
 
+  // Audits of one area, on one date, for one auditor show as a single entry ("12 assets").
   const audits = await db.select().from(assetAudits).where(eq(assetAudits.companyId, companyId));
+  const groups = new Map<string, { item: CalendarItem; count: number; assetLabel: string | null }>();
   for (const a of audits) {
     const mine = (a.assignedTo ?? "").trim().toLowerCase() === viewer.name.trim().toLowerCase();
     const actionable = OPEN_AUDIT(a.status) ? (mine || lead) : a.status === "Discrepancy" ? lead : false;
     if (!actionable) continue;
     const date = ukDate(a.scheduledDate) ?? ukDate(a.completionDate);
     if (!date) continue;
-    const where = a.expectedLocation || (a.assetId ? assetName.get(a.assetId) ?? a.assetId : null);
-    const item: CalendarItem = {
-      kind: "audit", id: a.id, date, title: a.status === "Discrepancy" ? `Resolve audit discrepancy` : `Asset audit`,
-      subtitle: where, status: a.status, category: null, priority: null, assignee: a.assignedTo ?? null,
-      overdue: OPEN_AUDIT(a.status) && date < today,
-    };
-    if (inRange(date)) items.push(item);
-    else if (item.overdue || a.status === "Discrepancy") overdue.push(item);
+    const status = OPEN_AUDIT(a.status) ? "Scheduled" : a.status;
+    const key = [date, status, a.expectedLocation ?? "", (a.assignedTo ?? "").toLowerCase()].join("|");
+    const g = groups.get(key);
+    if (g) { g.count++; continue; }
+    groups.set(key, {
+      count: 1,
+      assetLabel: a.assetId ? assetName.get(a.assetId) ?? a.assetId : null,
+      item: {
+        kind: "audit", id: a.id, date, title: "", subtitle: a.expectedLocation || null, status,
+        category: null, priority: null, assignee: a.assignedTo ?? null,
+        overdue: OPEN_AUDIT(a.status) && date < today,
+      },
+    });
+  }
+  for (const { item, count, assetLabel } of Array.from(groups.values())) {
+    const what = count === 1 ? (assetLabel ?? "1 asset") : `${count} assets`;
+    item.title = item.status === "Discrepancy"
+      ? `Resolve audit discrepanc${count === 1 ? "y" : "ies"}: ${what}`
+      : `Asset audit: ${what}`;
+    if (inRange(item.date)) items.push(item);
+    else if (item.overdue || item.status === "Discrepancy") overdue.push(item);
   }
 
   const pos = await db.select().from(purchaseOrders)

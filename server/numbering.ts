@@ -7,10 +7,10 @@ import type { db } from "./db";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
-const LOCKS: Record<string, number> = { JOB: 616161, REQ: 626262 };
+const LOCKS: Record<string, number> = { JOB: 616161, REQ: 626262, AUD: 636363 };
 
 /** Next "PREFIX-00001"-style number for `table`, after the highest existing one. */
-export async function nextNumber(tx: Tx, table: "jobs" | "maintenance_requests", prefix: "JOB" | "REQ", companyId: number): Promise<string> {
+export async function nextNumber(tx: Tx, table: "jobs" | "maintenance_requests" | "asset_audits", prefix: "JOB" | "REQ" | "AUD", companyId: number): Promise<string> {
   await tx.execute(sql`select pg_advisory_xact_lock(${LOCKS[prefix]}, ${companyId})`);
   const pattern = `^${prefix}-(\\d+)$`;
   const result = await tx.execute(sql`

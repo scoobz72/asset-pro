@@ -54,6 +54,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { useCurrentUser } from "@/hooks/use-auth";
+import { errorMessage } from "@/components/po";
+
+const LEAD_ROLES = ["Lead", "Manager", "Admin", "PlatformAdmin"];
+const refreshAudits = () => {
+  for (const key of ["/api/audits", "/api/calendar", "/api/dashboard/summary"]) queryClient.invalidateQueries({ queryKey: [key] });
+};
 
 export default function Audits() {
   const { toast } = useToast();
@@ -62,12 +69,11 @@ export default function Audits() {
   const [selectedAudit, setSelectedAudit] = useState<string | null>(null);
 
   const [scheduleOpen, setScheduleOpen] = useState(false);
-  const [scheduleScope, setScheduleScope] = useState("location");
   const [scheduleArea, setScheduleArea] = useState("");
   const [scheduleAssignee, setScheduleAssignee] = useState("");
   const [scheduleDate, setScheduleDate] = useState("");
 
-  const [conductOpen, setConductOpen] = useState<number | null>(null);
+  const [conductOpen, setConductOpen] = useState<string | null>(null);
   const [conductVerified, setConductVerified] = useState(true);
   const [conductNewLocation, setConductNewLocation] = useState("");
   const [conductNotes, setConductNotes] = useState("");
@@ -76,17 +82,24 @@ export default function Audits() {
   const { data: assets = [], isLoading: assetsLoading } = useAssets();
   const { data: users = [] } = useUsers();
   const { data: locations = [] } = useLocations();
+  const { data: me } = useCurrentUser();
+  const canSchedule = !!me && LEAD_ROLES.includes(me.role);
+  const failed = (err: unknown) => toast({ title: "Couldn't save", description: errorMessage(err), variant: "destructive" });
+  const assetsAt = (locationId: string) => (assets as any[]).filter((a: any) => a.locationId === locationId).length;
 
   const createAuditMutation = useMutation({
     mutationFn: async (data: any) => {
-      const res = await apiRequest("POST", "/api/audits", data);
-      return res.json();
+      const res = await apiRequest("POST", "/api/audits/schedule", data);
+      return res.json() as Promise<{ created: number; skipped: number; location: string; assignedTo: string }>;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/audits"] });
-      toast({ title: "Audit Scheduled", description: "The audit has been scheduled successfully." });
+    onError: failed,
+    onSuccess: (r) => {
+      refreshAudits();
+      toast({
+        title: r.created ? `${r.created} audit${r.created === 1 ? "" : "s"} scheduled` : "Nothing new to schedule",
+        description: `${r.location}, assigned to ${r.assignedTo}.${r.skipped ? ` ${r.skipped} asset${r.skipped === 1 ? " already has" : "s already have"} an open audit, so ${r.skipped === 1 ? "it was" : "they were"} skipped.` : ""} It's on their calendar.`,
+      });
       setScheduleOpen(false);
-      setScheduleScope("location");
       setScheduleArea("");
       setScheduleAssignee("");
       setScheduleDate("");
@@ -94,12 +107,13 @@ export default function Audits() {
   });
 
   const conductAuditMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: any }) => {
-      const res = await apiRequest("PATCH", `/api/audits/${id}`, data);
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const res = await apiRequest("PATCH", `/api/audits/${encodeURIComponent(id)}`, data);
       return res.json();
     },
+    onError: failed,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/audits"] });
+      refreshAudits();
       toast({ title: "Audit Submitted", description: "The audit result has been recorded." });
       setConductOpen(null);
       setConductVerified(true);
@@ -109,12 +123,13 @@ export default function Audits() {
   });
 
   const resolveAuditMutation = useMutation({
-    mutationFn: async (id: number) => {
-      const res = await apiRequest("PATCH", `/api/audits/${id}`, { status: "Resolved" });
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("PATCH", `/api/audits/${encodeURIComponent(id)}`, { status: "Resolved" });
       return res.json();
     },
+    onError: failed,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/audits"] });
+      refreshAudits();
       toast({ title: "Discrepancy Resolved", description: "The audit discrepancy has been resolved." });
     },
   });
@@ -149,14 +164,7 @@ export default function Audits() {
 
   const handleScheduleAudit = () => {
     if (!scheduleArea || !scheduleAssignee || !scheduleDate) return;
-    const assigneeUser = (users as any[]).find((u: any) => String(u.id) === scheduleAssignee);
-    createAuditMutation.mutate({
-      assetId: scheduleArea,
-      status: "Scheduled",
-      scheduledDate: scheduleDate,
-      assignedTo: assigneeUser?.name || scheduleAssignee,
-      expectedLocation: (locations as any[]).find((l: any) => l.id === scheduleArea)?.name || scheduleArea,
-    });
+    createAuditMutation.mutate({ locationId: scheduleArea, assigneeId: Number(scheduleAssignee), scheduledDate: scheduleDate });
   };
 
   const handleConductAudit = (audit: any) => {
@@ -221,7 +229,7 @@ export default function Audits() {
             </DialogContent>
           </Dialog>
 
-          <Dialog open={scheduleOpen} onOpenChange={setScheduleOpen}>
+          {canSchedule && <Dialog open={scheduleOpen} onOpenChange={setScheduleOpen}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="mr-2 size-4" />
@@ -232,22 +240,10 @@ export default function Audits() {
               <DialogHeader>
                 <DialogTitle>Schedule Area Audit</DialogTitle>
                 <DialogDescription>
-                  Create a bulk audit task for a specific location or production line to verify all assets within it.
+                  Creates one audit for every asset recorded at the location (or production line), on the auditor's calendar for that date.
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="auditType">Audit Scope</Label>
-                  <Select value={scheduleScope} onValueChange={setScheduleScope}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select scope..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="location">By Location (Building/Area)</SelectItem>
-                      <SelectItem value="line">By Production Line</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
                 <div className="grid gap-2">
                   <Label htmlFor="location">Target Area</Label>
                   <Select value={scheduleArea} onValueChange={setScheduleArea}>
@@ -256,7 +252,9 @@ export default function Audits() {
                     </SelectTrigger>
                     <SelectContent>
                       {(locations as any[]).map((loc: any) => (
-                        <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
+                        <SelectItem key={loc.id} value={loc.id} disabled={assetsAt(loc.id) === 0}>
+                          {loc.name} <span className="text-muted-foreground">· {loc.type} · {assetsAt(loc.id)} asset{assetsAt(loc.id) === 1 ? "" : "s"}</span>
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -280,12 +278,12 @@ export default function Audits() {
                 </div>
               </div>
               <DialogFooter>
-                <Button onClick={handleScheduleAudit} disabled={createAuditMutation.isPending}>
-                  {createAuditMutation.isPending ? "Scheduling..." : "Schedule Bulk Audit"}
+                <Button onClick={handleScheduleAudit} disabled={createAuditMutation.isPending || !scheduleArea || !scheduleAssignee || !scheduleDate}>
+                  {createAuditMutation.isPending ? "Scheduling..." : scheduleArea ? `Schedule ${assetsAt(scheduleArea)} audit${assetsAt(scheduleArea) === 1 ? "" : "s"}` : "Schedule audits"}
                 </Button>
               </DialogFooter>
             </DialogContent>
-          </Dialog>
+          </Dialog>}
         </div>
       </div>
 

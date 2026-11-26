@@ -9,7 +9,8 @@ import { calendarItems } from "./calendar";
 import { getJobDetail, addLabour, deleteLabour, addNote, createFollowUpJob, JobError } from "./jobs/records";
 import { getShifts, savePattern, deletePattern, addAbsence, deleteAbsence, ShiftError } from "./people/shifts";
 import { engineeringKpis } from "./kpi/kpis";
-import { jobs as jobsTable } from "@shared/schema";
+import { scheduleAreaAudit, scheduleAuditSchema, AuditError } from "./audits";
+import { jobs as jobsTable, assetAudits as assetAuditsTable } from "@shared/schema";
 import { recordMovementNow, recordStockTake, StockError, ukToday } from "./stock/ledger";
 import {
   PoError, listPos, getPo, createPo, updateDraft, runAction, receiveGoods,
@@ -268,7 +269,7 @@ export async function registerRoutes(
     try {
       await fn(req, res);
     } catch (err) {
-      if (err instanceof JobError || err instanceof ShiftError || err instanceof StockError) {
+      if (err instanceof JobError || err instanceof ShiftError || err instanceof StockError || err instanceof AuditError) {
         return res.status(err.status).json({ message: err.message });
       }
       throw err;
@@ -617,11 +618,23 @@ export async function registerRoutes(
     res.json(data);
   });
   app.post("/api/audits", async (req, res) => {
-    const data = parseBody(insertAssetAuditSchema, req, res);
+    // The server numbers new audits (AUD-00001...) unless an ID is given (e.g. by an import).
+    const data = parseBody(insertAssetAuditSchema.extend({ id: z.string().trim().min(1).max(50).optional() }), req, res);
     if (!data) return;
-    const audit = await storage.createAssetAudit(companyOf(req), data);
+    const companyId = companyOf(req);
+    const audit = await db.transaction(async (tx) => {
+      const id = data.id ?? await nextNumber(tx, "asset_audits", "AUD", companyId);
+      const [created] = await tx.insert(assetAuditsTable).values({ ...data, id, companyId }).returning();
+      return created;
+    });
     res.status(201).json(audit);
   });
+  // An area audit: one audit per asset at the location, for one auditor on one date.
+  app.post("/api/audits/schedule", domainErrors(async (req, res) => {
+    const data = parseBody(scheduleAuditSchema, req, res);
+    if (!data) return;
+    res.status(201).json(await scheduleAreaAudit(companyOf(req), data, actorOf(req)));
+  }));
   app.patch("/api/audits/:id", async (req, res) => {
     const data = parseUpdate(updateAssetAuditSchema, req, res);
     if (!data) return;
