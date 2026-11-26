@@ -67,3 +67,7 @@ export const REQUEST_URGENCIES = ["Low", "Medium", "High"] as const;
 export const REQUEST_STATUSES = ["Submitted", "Converted", "Rejected"] as const;
 /** Default job priority for a request's urgency (the triager can change it). */
 export const URGENCY_PRIORITY: Record<string, (typeof JOB_PRIORITIES)[number]> = { Low: "Low", Medium: "Medium", High: "High" };
+
+export const ABSENCE_REASONS = ["Holiday", "Sickness", "Training", "Other"] as const;
+/** Utilisation target band shown on reports (booked job hours ÷ shift hours). */
+export const UTILISATION_TARGET = { low: 0.7, high: 0.85 } as const;

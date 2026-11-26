@@ -9,6 +9,7 @@ import { BRAND_NAVY, BRAND_AMBER, LogoFull } from "@/components/Logo";
 import { usePrinting } from "@/hooks/use-printing";
 import { useCurrentUser } from "@/hooks/use-auth";
 import type { ReactElement } from "react";
+import { EngineeringKpis } from "@/components/EngineeringKpis";
 
 /** Paper size for each chart when printing: half an A4 landscape page. */
 const PRINT_W = 470;
@@ -178,6 +179,8 @@ export default function Reports() {
           </CardContent>
         </Card>
       </div>
+
+      <EngineeringKpis />
     </Layout>
   );
 }

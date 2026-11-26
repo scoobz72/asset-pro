@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, integer, numeric, timestamp, boolean, jsonb, date, primaryKey, foreignKey, unique, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
-import { LOCATION_TYPES, CRITICALITIES, STOCK_MOVEMENT_TYPES, CURRENCIES, HOME_CURRENCY, JOB_TYPES, JOB_PRIORITIES, REQUEST_URGENCIES } from "./constants";
+import { LOCATION_TYPES, CRITICALITIES, STOCK_MOVEMENT_TYPES, CURRENCIES, HOME_CURRENCY, JOB_TYPES, JOB_PRIORITIES, REQUEST_URGENCIES, ABSENCE_REASONS } from "./constants";
 
 /**
  * Multi-company model: every business record carries company_id, and record codes
@@ -46,6 +46,8 @@ export const users = pgTable("users", {
   password: text("password"),
   /** Largest PO (home currency, ex-VAT) this person may approve; null = can't approve. */
   poApprovalLimit: numeric("po_approval_limit", { precision: 14, scale: 2 }),
+  /** Labour cost per hour (home currency); copied onto each time entry when booked. */
+  hourlyRate: numeric("hourly_rate", { precision: 8, scale: 2 }),
   companyId: companyId(),
 }, (t) => [
   unique("users_company_id_id_key").on(t.companyId, t.id),
@@ -179,6 +181,7 @@ export const jobs = pgTable("jobs", {
   dueDate: text("due_date"),
   templateId: text("template_id"),
   type: text("type").default("Breakdown"),
+  description: text("description"),
   /** Set by the database when the job is created; never accepted from the client. */
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   /** Set by the server when the status becomes Completed, cleared if it is reopened. */
@@ -251,6 +254,74 @@ export const stockLots = pgTable("stock_lots", {
 }, (t) => [
   foreignKey({ name: "stock_lots_part_fk", columns: [t.companyId, t.partId], foreignColumns: [inventory.companyId, inventory.id] }),
   index("stock_lots_open_idx").on(t.companyId, t.partId, t.receivedAt),
+]);
+
+/** Hours an engineer spent on a job on a given day. The rate is copied at booking time. */
+export const jobLabour = pgTable("job_labour", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  jobId: text("job_id").notNull(),
+  userId: integer("user_id").notNull(),
+  workDate: date("work_date").notNull(),
+  hours: numeric("hours", { precision: 5, scale: 2 }).notNull(),
+  rate: numeric("rate", { precision: 8, scale: 2 }),
+  note: text("note"),
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  companyId: companyId(),
+}, (t) => [
+  foreignKey({ name: "job_labour_job_fk", columns: [t.companyId, t.jobId], foreignColumns: [jobs.companyId, jobs.id] }).onDelete("cascade"),
+  foreignKey({ name: "job_labour_user_fk", columns: [t.companyId, t.userId], foreignColumns: [users.companyId, users.id] }),
+  index("job_labour_user_date_idx").on(t.companyId, t.userId, t.workDate),
+  index("job_labour_job_idx").on(t.companyId, t.jobId),
+]);
+
+/** Notes on a job, and follow-up recommendations that can become new jobs. */
+export const jobNotes = pgTable("job_notes", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  jobId: text("job_id").notNull(),
+  kind: text("kind").notNull().default("Note"),
+  text: text("text").notNull(),
+  userName: text("user_name"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  followUpJobId: text("follow_up_job_id"),
+  companyId: companyId(),
+}, (t) => [
+  foreignKey({ name: "job_notes_job_fk", columns: [t.companyId, t.jobId], foreignColumns: [jobs.companyId, jobs.id] }).onDelete("cascade"),
+  index("job_notes_job_idx").on(t.companyId, t.jobId, t.createdAt),
+]);
+
+/** An engineer's weekly shift hours from a date; the latest pattern on or before a day applies. */
+export const shiftPatterns = pgTable("shift_patterns", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  userId: integer("user_id").notNull(),
+  effectiveFrom: date("effective_from").notNull(),
+  mon: numeric("mon", { precision: 4, scale: 2 }).notNull().default("0"),
+  tue: numeric("tue", { precision: 4, scale: 2 }).notNull().default("0"),
+  wed: numeric("wed", { precision: 4, scale: 2 }).notNull().default("0"),
+  thu: numeric("thu", { precision: 4, scale: 2 }).notNull().default("0"),
+  fri: numeric("fri", { precision: 4, scale: 2 }).notNull().default("0"),
+  sat: numeric("sat", { precision: 4, scale: 2 }).notNull().default("0"),
+  sun: numeric("sun", { precision: 4, scale: 2 }).notNull().default("0"),
+  companyId: companyId(),
+}, (t) => [
+  foreignKey({ name: "shift_patterns_user_fk", columns: [t.companyId, t.userId], foreignColumns: [users.companyId, users.id] }),
+  unique("shift_patterns_user_from_key").on(t.companyId, t.userId, t.effectiveFrom),
+]);
+
+/** Time off that reduces available shift hours (whole days, or a set number of hours a day). */
+export const absences = pgTable("absences", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  userId: integer("user_id").notNull(),
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date").notNull(),
+  /** Null means the whole shift each day. */
+  hoursPerDay: numeric("hours_per_day", { precision: 4, scale: 2 }),
+  reason: text("reason").notNull().default("Holiday"),
+  note: text("note"),
+  companyId: companyId(),
+}, (t) => [
+  foreignKey({ name: "absences_user_fk", columns: [t.companyId, t.userId], foreignColumns: [users.companyId, users.id] }),
+  index("absences_user_idx").on(t.companyId, t.userId, t.startDate),
 ]);
 
 /** One row per part per stock take, so each part's count history is kept. */
@@ -429,6 +500,9 @@ export const TRIAGE_ROLES = ["Lead", "Manager", "Admin", PLATFORM_ADMIN_ROLE] as
 export const USER_ROLES = ["Manager", "Admin", "Lead", "Technician"] as const;
 
 export const insertUserSchema = createInsertSchema(users, {
+  hourlyRate: () => z.union([z.number(), z.string()]).transform((v) => Number(v))
+    .refine((n) => Number.isFinite(n) && n >= 0 && n < 1_000_000, "Hourly rate must be 0 or more")
+    .transform((n) => n.toFixed(2)).nullable().optional(),
   poApprovalLimit: () => z.union([z.number(), z.string()]).transform((v) => Number(v))
     .refine((n) => Number.isFinite(n) && n >= 0 && n <= 999_999_999_999, "Approval limit must be 0 or more")
     .transform((n) => n.toFixed(2)).nullable().optional(),
@@ -549,6 +623,43 @@ export const requestRejectSchema = z.object({
   reason: z.string().trim().min(1, "Give a reason").max(1000),
 }).strict();
 
+const ymdString = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
+const dayHours = z.number().min(0).max(24);
+
+export const labourEntrySchema = z.object({
+  /** Defaults to the signed-in person; booking for someone else is Lead/Manager/Admin only. */
+  userId: z.number().int().positive().optional(),
+  workDate: ymdString,
+  hours: z.number().positive().max(24).refine((h) => Math.round(h * 4) === h * 4, "Book hours in quarter hours, e.g. 1.25"),
+  note: z.string().trim().max(500).optional().nullable(),
+}).strict();
+
+export const jobNoteSchema = z.object({
+  kind: z.enum(["Note", "Follow-up"]).default("Note"),
+  text: z.string().trim().min(1, "Write something").max(4000),
+}).strict();
+
+export const followUpJobSchema = z.object({
+  title: z.string().trim().min(1).max(200).optional(),
+  type: z.enum(JOB_TYPES).default("Planned"),
+  priority: z.enum(JOB_PRIORITIES).default("Medium"),
+  assigneeId: z.number().int().positive().optional().nullable(),
+  dueDate: ymdString.optional().nullable(),
+}).strict();
+
+export const shiftPatternSchema = z.object({
+  effectiveFrom: ymdString,
+  mon: dayHours, tue: dayHours, wed: dayHours, thu: dayHours, fri: dayHours, sat: dayHours, sun: dayHours,
+}).strict();
+
+export const absenceSchema = z.object({
+  startDate: ymdString,
+  endDate: ymdString,
+  hoursPerDay: dayHours.optional().nullable(),
+  reason: z.enum(ABSENCE_REASONS).default("Holiday"),
+  note: z.string().trim().max(500).optional().nullable(),
+}).strict().refine((a) => a.endDate >= a.startDate, "The end date must be on or after the start date");
+
 export const reorderCreateSchema = z.object({
   items: z.array(z.object({
     partId: z.string().trim().min(1).max(50),
@@ -645,6 +756,10 @@ export type PurchaseOrderLine = typeof purchaseOrderLines.$inferSelect;
 export type GoodsReceipt = typeof goodsReceipts.$inferSelect;
 export type GoodsReceiptLine = typeof goodsReceiptLines.$inferSelect;
 export type PoEvent = typeof poEvents.$inferSelect;
+export type JobLabour = typeof jobLabour.$inferSelect;
+export type JobNote = typeof jobNotes.$inferSelect;
+export type ShiftPattern = typeof shiftPatterns.$inferSelect;
+export type Absence = typeof absences.$inferSelect;
 export type StockTake = typeof stockTakes.$inferSelect;
 export type PurchaseOrder = typeof purchaseOrders.$inferSelect;
 export type AssetAudit = typeof assetAudits.$inferSelect;

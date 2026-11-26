@@ -130,6 +130,7 @@ const publicUserColumns = {
   avatar: users.avatar,
   email: users.email,
   poApprovalLimit: users.poApprovalLimit,
+  hourlyRate: users.hourlyRate,
   companyId: users.companyId,
 };
 

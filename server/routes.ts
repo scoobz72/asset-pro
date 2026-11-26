@@ -6,6 +6,9 @@ import { storage } from "./storage";
 import { submitRequest, convertRequest, rejectRequest, RequestError } from "./requests";
 import { nextNumber } from "./numbering";
 import { calendarItems } from "./calendar";
+import { getJobDetail, addLabour, deleteLabour, addNote, createFollowUpJob, JobError } from "./jobs/records";
+import { getShifts, savePattern, deletePattern, addAbsence, deleteAbsence, ShiftError } from "./people/shifts";
+import { engineeringKpis } from "./kpi/kpis";
 import { jobs as jobsTable } from "@shared/schema";
 import { recordMovementNow, recordStockTake, StockError, ukToday } from "./stock/ledger";
 import {
@@ -35,6 +38,7 @@ import {
   stockMovementSchema, stockTakeSchema,
   poDraftSchema, poActionSchema, goodsReceiptSchema, reorderCreateSchema,
   requestSubmitSchema, requestConvertSchema, requestRejectSchema,
+  labourEntrySchema, jobNoteSchema, followUpJobSchema, shiftPatternSchema, absenceSchema,
   insertPurchaseOrderSchema, updatePurchaseOrderSchema,
   insertAssetAuditSchema, updateAssetAuditSchema,
   insertMaintenanceRequestSchema, updateMaintenanceRequestSchema,
@@ -131,7 +135,8 @@ export async function registerRoutes(
   // ===== USERS =====
   app.get("/api/users", async (req, res) => {
     const data = await storage.getUsers(companyOf(req));
-    res.json(data);
+    // Hourly rates are pay information: only Managers/Admins see them.
+    res.json(isPrivileged(req.user) ? data : data.map(({ hourlyRate: _rate, ...u }) => u));
   });
   // People management is Admin-only: adding users, changing roles, passwords and PO limits.
   app.post("/api/users", requireAdmin, async (req, res) => {
@@ -256,6 +261,92 @@ export async function registerRoutes(
   });
   app.post("/api/import/preview", requirePrivileged, xlsxBody, (req, res) => runImport(req, res, previewImport));
   app.post("/api/import/commit", requirePrivileged, xlsxBody, (req, res) => runImport(req, res, commitImport));
+
+  // ===== JOB RECORDS, SHIFTS AND KPIs (docs/asset-stock-jobs-plan.md 1.2) =====
+  const actorOf = (req: Request) => ({ id: req.user!.id, name: req.user!.name, role: req.user!.role });
+  const domainErrors = (fn: (req: Request, res: Response) => Promise<unknown>) => async (req: Request, res: Response) => {
+    try {
+      await fn(req, res);
+    } catch (err) {
+      if (err instanceof JobError || err instanceof ShiftError || err instanceof StockError) {
+        return res.status(err.status).json({ message: err.message });
+      }
+      throw err;
+    }
+  };
+  const intParam = (v: unknown) => {
+    const n = Number(v);
+    return Number.isInteger(n) && n > 0 ? n : NaN;
+  };
+
+  app.get("/api/jobs/:id/record", domainErrors(async (req, res) => {
+    res.json(await getJobDetail(companyOf(req), String(req.params.id), actorOf(req)));
+  }));
+  // Anyone signed in books their own hours on any job, including planned work / PPMs.
+  app.post("/api/jobs/:id/labour", domainErrors(async (req, res) => {
+    const data = parseBody(labourEntrySchema, req, res);
+    if (!data) return;
+    res.status(201).json(await addLabour(companyOf(req), String(req.params.id), data, actorOf(req)));
+  }));
+  app.delete("/api/jobs/:id/labour/:labourId", domainErrors(async (req, res) => {
+    const labourId = intParam(req.params.labourId);
+    if (Number.isNaN(labourId)) return res.status(400).json({ message: "Invalid entry" });
+    await deleteLabour(companyOf(req), String(req.params.id), labourId, actorOf(req));
+    res.status(204).end();
+  }));
+  app.post("/api/jobs/:id/notes", domainErrors(async (req, res) => {
+    const data = parseBody(jobNoteSchema, req, res);
+    if (!data) return;
+    res.status(201).json(await addNote(companyOf(req), String(req.params.id), data, actorOf(req)));
+  }));
+  app.post("/api/jobs/:id/notes/:noteId/follow-up-job", domainErrors(async (req, res) => {
+    const noteId = intParam(req.params.noteId);
+    if (Number.isNaN(noteId)) return res.status(400).json({ message: "Invalid note" });
+    const data = parseBody(followUpJobSchema, req, res);
+    if (!data) return;
+    res.status(201).json(await createFollowUpJob(companyOf(req), String(req.params.id), noteId, data, actorOf(req)));
+  }));
+
+  // Shift hours and absences: Managers/Admins maintain them; anyone can see their own.
+  app.get("/api/users/:id/shifts", domainErrors(async (req, res) => {
+    const userId = intParam(req.params.id);
+    if (Number.isNaN(userId)) return res.status(400).json({ message: "Invalid user" });
+    res.json(await getShifts(companyOf(req), userId, actorOf(req)));
+  }));
+  app.put("/api/users/:id/shifts", domainErrors(async (req, res) => {
+    const userId = intParam(req.params.id);
+    if (Number.isNaN(userId)) return res.status(400).json({ message: "Invalid user" });
+    const data = parseBody(shiftPatternSchema, req, res);
+    if (!data) return;
+    res.json(await savePattern(companyOf(req), userId, data, actorOf(req)));
+  }));
+  app.delete("/api/users/:id/shifts/:patternId", domainErrors(async (req, res) => {
+    const userId = intParam(req.params.id), patternId = intParam(req.params.patternId);
+    if (Number.isNaN(userId) || Number.isNaN(patternId)) return res.status(400).json({ message: "Invalid request" });
+    await deletePattern(companyOf(req), userId, patternId, actorOf(req));
+    res.status(204).end();
+  }));
+  app.post("/api/users/:id/absences", domainErrors(async (req, res) => {
+    const userId = intParam(req.params.id);
+    if (Number.isNaN(userId)) return res.status(400).json({ message: "Invalid user" });
+    const data = parseBody(absenceSchema, req, res);
+    if (!data) return;
+    res.status(201).json(await addAbsence(companyOf(req), userId, data, actorOf(req)));
+  }));
+  app.delete("/api/users/:id/absences/:absenceId", domainErrors(async (req, res) => {
+    const userId = intParam(req.params.id), absenceId = intParam(req.params.absenceId);
+    if (Number.isNaN(userId) || Number.isNaN(absenceId)) return res.status(400).json({ message: "Invalid request" });
+    await deleteAbsence(companyOf(req), userId, absenceId, actorOf(req));
+    res.status(204).end();
+  }));
+
+  app.get("/api/reports/kpis", async (req, res) => {
+    const iso = /^\d{4}-\d{2}-\d{2}$/;
+    const from = String(req.query.from ?? ""), to = String(req.query.to ?? "");
+    if (!iso.test(from) || !iso.test(to) || from > to) return res.status(400).json({ message: "Give from and to as YYYY-MM-DD" });
+    if ((Date.parse(to) - Date.parse(from)) / 86400000 > 731) return res.status(400).json({ message: "The period can be at most 2 years" });
+    res.json(await engineeringKpis(companyOf(req), from, to, req.user!.role));
+  });
 
   // ===== CALENDAR: everything the signed-in person can action, by date =====
   app.get("/api/calendar", async (req, res) => {

@@ -1,4 +1,5 @@
 import Layout from "@/components/Layout";
+import { Link } from "wouter";
 import { useState } from "react";
 import { useJobs, useUsers, useAssets, useCreateMutation, useUpdateMutation, useDeleteMutation } from "@/hooks/use-data";
 import { 
@@ -359,10 +360,12 @@ export default function Jobs() {
             ) : (
               filteredJobs.map((job) => (
                 <TableRow key={job.id} data-testid={`row-job-${job.id}`}>
-                  <TableCell className="font-medium font-mono text-xs text-muted-foreground">
-                    {job.id}
+                  <TableCell className="font-medium font-mono text-xs">
+                    <Link href={`/jobs/${encodeURIComponent(job.id)}`} className="text-primary hover:underline">{job.id}</Link>
                   </TableCell>
-                  <TableCell className="font-medium" data-testid={`text-job-title-${job.id}`}>{job.title}</TableCell>
+                  <TableCell className="font-medium" data-testid={`text-job-title-${job.id}`}>
+                    <Link href={`/jobs/${encodeURIComponent(job.id)}`} className="hover:underline">{job.title}</Link>
+                  </TableCell>
                   <TableCell data-testid={`text-job-asset-${job.id}`}>{getAssetName(job.assetId)}</TableCell>
                   <TableCell data-testid={`text-job-assignee-${job.id}`}>
                     {getAssigneeName(job.assigneeId)}

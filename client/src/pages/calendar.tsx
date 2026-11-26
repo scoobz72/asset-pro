@@ -89,7 +89,11 @@ function ItemRow({ item, onTriage, onReject }: { item: Item; onTriage: (i: Item)
           {item.kind === "request" && item.category && <Badge variant="secondary" className="text-[10px]">{item.category} urgency</Badge>}
           {item.overdue && <Badge variant="destructive" className="text-[10px]">Overdue</Badge>}
         </div>
-        <div className="font-medium text-sm mt-0.5">{item.title}</div>
+        <div className="font-medium text-sm mt-0.5">
+          {item.kind === "job"
+            ? <Link href={`/jobs/${encodeURIComponent(item.id)}`} className="hover:underline">{item.title}</Link>
+            : item.title}
+        </div>
         <div className="text-xs text-muted-foreground">
           {[item.subtitle, item.kind === "request" ? (item.assignee ? `from ${item.assignee}` : null) : item.assignee].filter(Boolean).join(" · ")}
           {item.overdue && <> · due {format(parseISO(item.date), "d MMM")}</>}

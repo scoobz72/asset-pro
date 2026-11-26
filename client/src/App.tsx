@@ -8,6 +8,7 @@ import { useCurrentUser } from "@/hooks/use-auth";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import Jobs from "@/pages/jobs";
+import JobPage from "@/pages/job";
 import Templates from "@/pages/templates";
 import Assets from "@/pages/assets";
 import Audits from "@/pages/audits";
@@ -33,6 +34,7 @@ function Router({ defaultLandingPage, setDefaultLandingPage, isPlatformAdmin }: 
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
+      <Route path="/jobs/:id" component={JobPage} />
       <Route path="/jobs" component={Jobs} />
       <Route path="/templates" component={Templates} />
       <Route path="/assets" component={Assets} />

@@ -263,7 +263,7 @@ part of this phase.
 | 1.1 Stock ledger | Built: `server/stock/{fifo,ledger}.ts`, `POST /api/stock/movements`, `POST /api/stock/stock-take`, migration `002-stock-ledger.sql`; Inventory, Stock Take, Transactions pages and the Excel import use it. Tests: `npm run test:ledger` (the database part runs only with `DATABASE_URL`, always rolled back) |
 | P Purchasing and currency | Built: `server/purchasing/{rules,fx,rates,po}.ts`, migration `003-purchasing.sql`, PO list / detail / print pages, reorder suggestions, approval limits on the Team page, supplier currency (also in the Excel import). Tests: `npm run test:purchasing` (the end-to-end part needs `DATABASE_URL`; it uses a throwaway company and deletes it afterwards) |
 | R Scheduled dashboard reports (PDF by email) | Next, with emailing POs: needs an SMTP mailbox in `.env` and the `nodemailer` + `pdfkit` packages |
-| 1.2 Job records | After purchasing |
+| 1.2 Job records + utilisation | Built: job page `/jobs/:id` (time booking, parts issued/returned at FIFO, notes and follow-up recommendations → linked follow-up jobs, POs for the job, asset KPI trend), `server/jobs/records.ts`; shift patterns and absences per engineer (`server/people/shifts.ts`, Team page, Managers/Admins); hourly labour rate (Admin, hidden from non-managers); Engineering KPIs on the Reports page (`server/kpi/{availability,kpis}.ts`, `GET /api/reports/kpis`). Migration `005-job-records-shifts.sql`. Any user books their own hours; Leads+ book for others |
 | 1.3 PPM schedules | Not started |
 | Phase 2 | Not started |
 | Phase 3 | Not started |

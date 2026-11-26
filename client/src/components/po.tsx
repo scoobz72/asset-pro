@@ -132,8 +132,10 @@ type EditLine = { key: number; partId: string; description: string; quantity: st
 const NO_PART = "__nonstock__";
 let lineKey = 1;
 
-export function PoEditorDialog({ open, onOpenChange, po, onSaved }: {
+export function PoEditorDialog({ open, onOpenChange, po, onSaved, defaultJobId }: {
   open: boolean; onOpenChange: (open: boolean) => void; po?: PoDetail | null; onSaved: (id: string) => void;
+  /** Pre-selects the job when raising a PO from a job page. */
+  defaultJobId?: string;
 }) {
   const { data: suppliersData = [] } = useSuppliers();
   const { data: partsData = [] } = useInventory();
@@ -155,13 +157,13 @@ export function PoEditorDialog({ open, onOpenChange, po, onSaved }: {
     setError(null);
     setSupplierId(po?.supplierId ?? "");
     setCurrency(po?.currency ?? HOME_CURRENCY);
-    setJobId(po?.jobId ?? "");
+    setJobId(po?.jobId ?? defaultJobId ?? "");
     setExpectedDate(po?.expectedDate ?? "");
     setNotes(po?.notes ?? "");
     setLines(po?.lines?.length
       ? po.lines.map((l) => ({ key: lineKey++, partId: l.partId ?? "", description: l.description, quantity: String(l.quantity), unitPrice: Number(l.unitPrice).toFixed(2) }))
       : [{ key: lineKey++, partId: "", description: "", quantity: "1", unitPrice: "" }]);
-  }, [open, po]);
+  }, [open, po, defaultJobId]);
 
   const chooseSupplier = (id: string) => {
     setSupplierId(id);

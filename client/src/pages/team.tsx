@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import Layout from "@/components/Layout";
 import { useUsers, useCreateMutation, useUpdateMutation } from "@/hooks/use-data";
-import { useCurrentUser, ADMIN_ROLES, PLATFORM_ADMIN_ROLE } from "@/hooks/use-auth";
+import { useCurrentUser, ADMIN_ROLES, PLATFORM_ADMIN_ROLE, PRIVILEGED_ROLES } from "@/hooks/use-auth";
+import { ShiftsDialog } from "@/components/ShiftsDialog";
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +23,7 @@ import { Mail, MoreVertical, Plus } from "lucide-react";
 
 const ROLES = ["Manager", "Admin", "Lead", "Technician"];
 
-type TeamUser = { id: number; name: string; role: string; status: string; avatar: string | null; email: string | null; poApprovalLimit: string | null };
+type TeamUser = { id: number; name: string; role: string; status: string; avatar: string | null; email: string | null; poApprovalLimit: string | null; hourlyRate?: string | null };
 
 /** Stored as the largest value the column holds; shown as "Unlimited". */
 const UNLIMITED = 999999999999.99;
@@ -120,9 +121,11 @@ function EditMemberDialog({ user, onClose, selfId }: { user: TeamUser | null; on
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<LimitMode>("none");
   const [amount, setAmount] = useState("");
+  const [rate, setRate] = useState("");
 
   useEffect(() => {
     if (user) {
+      setRate(user.hourlyRate == null ? "" : Number(user.hourlyRate).toFixed(2));
       setRole(user.role);
       setPassword("");
       setError(null);
@@ -147,6 +150,13 @@ function EditMemberDialog({ user, onClose, selfId }: { user: TeamUser | null; on
     }
     const current = user.poApprovalLimit === null ? null : Number(user.poApprovalLimit);
     if (limit !== current) data.poApprovalLimit = limit;
+    const rateText = rate.replace(/[£,\s]/g, "");
+    const newRate = rateText === "" ? null : Number(rateText);
+    if (newRate !== null && (!Number.isFinite(newRate) || newRate < 0)) {
+      return setError("Enter the hourly labour rate in GBP, e.g. 32.50, or leave it blank.");
+    }
+    const curRate = user.hourlyRate == null ? null : Number(user.hourlyRate);
+    if (newRate !== curRate) data.hourlyRate = newRate;
     if (Object.keys(data).length === 0) return onClose();
     update.mutate({ id: user.id, data }, {
       onSuccess: () => {
@@ -162,7 +172,7 @@ function EditMemberDialog({ user, onClose, selfId }: { user: TeamUser | null; on
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{user.name}</DialogTitle>
-          <DialogDescription>Change their role, PO approval limit or password.</DialogDescription>
+          <DialogDescription>Change their role, PO approval limit, labour rate or password.</DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4">
           {!isPlatformAdmin && isSelf && (
@@ -201,6 +211,15 @@ function EditMemberDialog({ user, onClose, selfId }: { user: TeamUser | null; on
             <p className="text-xs text-muted-foreground">Nobody can approve a PO they raised themselves.</p>
           </div>
           <div className="space-y-2">
+            <Label htmlFor="e-rate">Labour rate per hour (GBP)</Label>
+            <div className="relative">
+              <span className="absolute left-3 top-2 text-sm text-muted-foreground">£</span>
+              <Input id="e-rate" className="pl-7 pr-12" inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="Not set" data-testid="input-hourly-rate" />
+              <span className="absolute right-3 top-2 text-xs text-muted-foreground">GBP</span>
+            </div>
+            <p className="text-xs text-muted-foreground">Used to cost hours booked to jobs. Only Managers and Admins see rates and labour costs. Changing it doesn't re-cost hours already booked.</p>
+          </div>
+          <div className="space-y-2">
             <Label htmlFor="e-pass">New password (leave blank to keep the current one)</Label>
             <Input id="e-pass" type="text" minLength={8} maxLength={200} autoComplete="off" value={password}
               onChange={(e) => setPassword(e.target.value)} />
@@ -224,6 +243,9 @@ export default function Team() {
   const userList = (users as TeamUser[] | undefined) ?? [];
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<TeamUser | null>(null);
+  const [shifts, setShifts] = useState<TeamUser | null>(null);
+  // Managers and Admins keep shift patterns and absences (they feed engineer utilisation).
+  const canShifts = !!currentUser && PRIVILEGED_ROLES.includes(currentUser.role);
 
   if (isLoading) {
     return (
@@ -262,7 +284,7 @@ export default function Team() {
                 <CardDescription>{user.role === PLATFORM_ADMIN_ROLE ? "Platform admin" : user.role}</CardDescription>
                 <p className="text-xs text-muted-foreground mt-0.5" data-testid={`text-approval-${user.id}`}>{approvalLimitText(user.poApprovalLimit)}</p>
               </div>
-              {canManage && (
+              {(canManage || canShifts) && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" aria-label={`Manage ${user.name}`}>
@@ -270,7 +292,8 @@ export default function Team() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => setEditing(user)}>Edit role, approval limit or password</DropdownMenuItem>
+                    {canManage && <DropdownMenuItem onClick={() => setEditing(user)}>Edit role, approval limit, rate or password</DropdownMenuItem>}
+                    {canShifts && <DropdownMenuItem onClick={() => setShifts(user)} data-testid={`menu-shifts-${user.id}`}>Shift hours & absences</DropdownMenuItem>}
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
@@ -302,6 +325,7 @@ export default function Team() {
 
       <AddMemberDialog open={addOpen} onOpenChange={setAddOpen} />
       <EditMemberDialog user={editing} onClose={() => setEditing(null)} selfId={currentUser?.id} />
+      <ShiftsDialog user={shifts} onClose={() => setShifts(null)} />
     </Layout>
   );
 }
