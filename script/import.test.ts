@@ -222,6 +222,38 @@ test("a name in an ID column is matched when exactly one record has that name", 
   assert.equal(plan.records.locations[0].values.siteId, "SITE-01");
   assert.equal(plan.records.assets[0].values.locationId, "L1", "names of rows in the same workbook match too");
   assert.equal(plan.errorCount, 1, "an ambiguous name is still an error");
-  assert.match(plan.errors[0].message, /name of 2 sites \(S-A, S-B\)/);
+  assert.match(plan.errors[0].message, /matches 2 sites \(S-A, S-B\)/);
   assert.ok(plan.warnings.some((w) => /'hfc production' matched by name to Site ID 'SITE-01'/.test(w.message)));
+});
+
+test("identical repeated rows are imported once; differing repeats are errors", async () => {
+  const parsed = await parse({
+    storeRooms: [{ id: "MOD1", name: "Module 1 stores", siteId: "S1" }],
+    sites: [{ id: "S1", name: "Site" }],
+    bins: [
+      { id: "T04", storeRoomId: "MOD1" },
+      { id: "T04", storeRoomId: "MOD1" },
+      { id: "T05", storeRoomId: "MOD1", description: "a" },
+      { id: "T05", storeRoomId: "MOD1", description: "b" },
+    ],
+  });
+  const plan = buildPlan(parsed, emptyExisting(), IMPORTER);
+  assert.equal(plan.errorCount, 1);
+  assert.match(plan.errors[0].message, /T05' also appears on row 5 with different details/);
+  assert.ok(plan.warnings.some((w) => w.tab === "Bins" && /1 repeated row ignored/.test(w.message)));
+  assert.equal(plan.summary.find((x) => x.key === "bins")!.new, 2);
+});
+
+test("IDs in different letter case match; values from the wrong tab get a hint", async () => {
+  const parsed = await parse({
+    sites: [{ id: "S1", name: "HFC Production" }],
+    locations: [{ id: "LINE 9", name: "Line 9", siteId: "s1" }],
+    assets: [{ id: "A1", name: "Slicer", locationId: "HFC Production", parentAssetId: "LINE 9" }],
+  });
+  const plan = buildPlan(parsed, emptyExisting(), IMPORTER);
+  assert.equal(plan.records.locations[0].values.siteId, "S1");
+  assert.ok(plan.warnings.some((w) => /'s1' matched by ID to Site ID 'S1'/.test(w.message)));
+  const messages = plan.errors.map((e) => e.message);
+  assert.ok(messages.some((m) => /'HFC Production' not found\. It looks like a site \(Sites tab\)/.test(m)));
+  assert.ok(messages.some((m) => /'LINE 9' not found\. It looks like a location \(Asset Locations tab\)/.test(m)));
 });

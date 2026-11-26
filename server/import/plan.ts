@@ -83,6 +83,13 @@ function same(existing: unknown, value: CellValue | undefined): boolean {
 
 const quote = (s: string) => `'${s}'`;
 
+const withArticle = (label: string) => `${/^[aeiou]/i.test(label) ? "an" : "a"} ${label.toLowerCase()}`;
+
+/** A row's cells as one comparable string, for spotting exact repeats. */
+function rowKey(values: Record<string, CellValue>): string {
+  return JSON.stringify(Object.keys(values).sort().map((k) => [k, values[k]]));
+}
+
 export function buildPlan(parsed: ParsedWorkbook, existing: Existing, importer: Importer): ImportPlan {
   const errors: ImportIssue[] = [...parsed.errors];
   const warnings: ImportIssue[] = [...parsed.warnings];
@@ -100,23 +107,39 @@ export function buildPlan(parsed: ParsedWorkbook, existing: Existing, importer: 
   // People often type a name where an ID is expected ("HFC Production" for SITE-01).
   // When a reference isn't an ID but matches exactly one record's name, the ID is used
   // instead and the substitution is listed as a warning in the preview.
-  const nameIndex = new Map<RecordTab, Map<string, Set<string>>>();
-  const idsByName = (t: RecordTab, name: string): string[] => {
-    if (!nameIndex.has(t)) {
-      const index = new Map<string, Set<string>>();
-      const add = (id: unknown, n: unknown) => {
-        if (typeof id !== "string" || typeof n !== "string" || !n.trim()) return;
-        const key = n.trim().toLowerCase();
-        if (!index.has(key)) index.set(key, new Set());
-        index.get(key)!.add(id);
+  // People often type a name where an ID is expected ("HFC Production" for SITE-01), or an
+  // ID in different letter case. When a reference matches exactly one record by ID (ignoring
+  // case) or by name, that record's ID is used and the substitution is listed as a warning.
+  const lookup = new Map<RecordTab, { ids: Map<string, Set<string>>; names: Map<string, Set<string>> }>();
+  const indexFor = (t: RecordTab) => {
+    if (!lookup.has(t)) {
+      const ids = new Map<string, Set<string>>();
+      const names = new Map<string, Set<string>>();
+      const add = (map: Map<string, Set<string>>, key: unknown, id: string) => {
+        if (typeof key !== "string" || !key.trim()) return;
+        const k = key.trim().toLowerCase();
+        if (!map.has(k)) map.set(k, new Set());
+        map.get(k)!.add(id);
       };
-      for (const [id, rec] of Array.from(existing.records[t])) add(id, rec.name);
-      for (const r of parsed.tabs[t] ?? []) add(r.values.id, r.values.name);
-      nameIndex.set(t, index);
+      const addRecord = (id: unknown, name: unknown) => {
+        if (typeof id !== "string") return;
+        add(ids, id, id);
+        add(names, name, id);
+      };
+      for (const [id, rec] of Array.from(existing.records[t])) addRecord(id, rec.name);
+      for (const r of parsed.tabs[t] ?? []) addRecord(r.values.id, r.values.name);
+      lookup.set(t, { ids, names });
     }
-    return Array.from(nameIndex.get(t)!.get(name.trim().toLowerCase()) ?? []);
+    return lookup.get(t)!;
   };
-  const byName = new Map<string, { tab: TabKey; column: string; name: string; id: string; rows: number[] }>();
+  const find = (t: RecordTab, text: string) => {
+    const k = text.trim().toLowerCase();
+    const index = indexFor(t);
+    const byId = Array.from(index.ids.get(k) ?? []);
+    if (byId.length > 0) return { how: "ID", matches: byId };
+    return { how: "name", matches: Array.from(index.names.get(k) ?? []) };
+  };
+  const substitutions = new Map<string, { tab: TabKey; column: string; text: string; id: string; how: string; rows: number[] }>();
 
   const checkRefs = (tab: TabKey, r: ParsedRow, columns: ColumnSpec[]) => {
     for (const col of columns) {
@@ -126,17 +149,24 @@ export function buildPlan(parsed: ParsedWorkbook, existing: Existing, importer: 
       const target = col.ref as RecordTab;
       if (exists(target, v)) continue;
       const label = TAB_BY_KEY[col.ref].label;
-      const matches = idsByName(target, v);
+      const { how, matches } = find(target, v);
       if (matches.length === 1) {
         r.values[col.key] = matches[0];
         const key = `${tab}\u0001${col.header}\u0001${v}`;
-        if (!byName.has(key)) byName.set(key, { tab, column: col.header, name: v, id: matches[0], rows: [] });
-        byName.get(key)!.rows.push(r.row);
-      } else if (matches.length > 1) {
-        err(tab, r.row, col.header, `${quote(v)} is the name of ${matches.length} ${label.toLowerCase()}s (${matches.join(", ")}). Use the ${col.header} instead`);
-      } else {
-        err(tab, r.row, col.header, `${col.header} ${quote(v)} not found: it isn't in your company or in the ${TAB_BY_KEY[col.ref].sheet} tab. Use the ID, not the name`);
+        if (!substitutions.has(key)) substitutions.set(key, { tab, column: col.header, text: v, id: matches[0], how, rows: [] });
+        substitutions.get(key)!.rows.push(r.row);
+        continue;
       }
+      if (matches.length > 1) {
+        err(tab, r.row, col.header, `${quote(v)} matches ${matches.length} ${label.toLowerCase()}s (${matches.join(", ")}). Use the exact ${col.header}`);
+        continue;
+      }
+      // Not found: say so, and point out if the value belongs to a different kind of record.
+      const elsewhere = RECORD_TABS.filter((t) => t !== target && find(t, v).matches.length > 0);
+      const hint = elsewhere.length > 0
+        ? ` It looks like ${elsewhere.map((t) => `${withArticle(TAB_BY_KEY[t].label)} (${TAB_BY_KEY[t].sheet} tab)`).join(" or ")}, not ${withArticle(label)}.`
+        : ` Add it to the ${TAB_BY_KEY[col.ref].sheet} tab or use an existing ${col.header}.`;
+      err(tab, r.row, col.header, `${col.header} ${quote(v)} not found.${hint}`);
     }
   };
 
@@ -148,18 +178,27 @@ export function buildPlan(parsed: ParsedWorkbook, existing: Existing, importer: 
     if (!rows) continue;
     const spec = TAB_BY_KEY[t];
     const idHeader = spec.columns[0].header;
-    const firstSeen = new Map<string, number>();
+    // First row for each ID, with its cells as typed (before any name -> ID substitution).
+    const firstSeen = new Map<string, { row: number; typed: string }>();
+    const repeats = new Map<string, number[]>();
     const s: TabSummary = { key: t, tab: spec.sheet, new: 0, updated: 0, unchanged: 0 };
 
     for (const r of rows) {
       const id = r.values.id;
       if (typeof id !== "string") continue; // "required" error already recorded
+      const typed = rowKey(r.values);
       const prev = firstSeen.get(id);
       if (prev !== undefined) {
-        err(t, r.row, idHeader, `${idHeader} ${quote(id)} also appears on row ${prev}`);
+        // An exact repeat (e.g. a bin listed once per part) is harmless: import it once.
+        if (prev.typed === typed) {
+          if (!repeats.has(id)) repeats.set(id, []);
+          repeats.get(id)!.push(r.row);
+        } else {
+          err(t, r.row, idHeader, `${idHeader} ${quote(id)} also appears on row ${prev.row} with different details`);
+        }
         continue;
       }
-      firstSeen.set(id, r.row);
+      firstSeen.set(id, { row: r.row, typed });
       checkRefs(t, r, spec.columns);
 
       if (t === "parts" && r.values.primarySupplierId && r.values.primarySupplierId === r.values.secondarySupplierId) {
@@ -182,6 +221,15 @@ export function buildPlan(parsed: ParsedWorkbook, existing: Existing, importer: 
       const action: Action = Object.keys(changed).length > 0 ? "update" : "unchanged";
       records[t].push({ id, row: r.row, action, values: r.values, changed });
       if (action === "update") s.updated++; else s.unchanged++;
+    }
+    if (repeats.size > 0) {
+      const ids = Array.from(repeats.keys());
+      const count = Array.from(repeats.values()).reduce((n, rs) => n + rs.length, 0);
+      warnings.push({
+        tab: spec.sheet,
+        column: idHeader,
+        message: `${count} repeated row${count === 1 ? "" : "s"} ignored (identical to an earlier row): ${ids.slice(0, 8).join(", ")}${ids.length > 8 ? ` and ${ids.length - 8} more` : ""}`,
+      });
     }
     summary.push(s);
   }
@@ -316,12 +364,12 @@ export function buildPlan(parsed: ParsedWorkbook, existing: Existing, importer: 
     }
   }
 
-  for (const m of Array.from(byName.values())) {
+  for (const m of Array.from(substitutions.values())) {
     const rows = m.rows.length === 1 ? `row ${m.rows[0]}` : `${m.rows.length} rows`;
     warnings.push({
       tab: TAB_BY_KEY[m.tab].sheet,
       column: m.column,
-      message: `${quote(m.name)} matched by name to ${m.column} ${quote(m.id)} (${rows})`,
+      message: `${quote(m.text)} matched by ${m.how} to ${m.column} ${quote(m.id)} (${rows})`,
     });
   }
 
