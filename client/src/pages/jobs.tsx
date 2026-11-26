@@ -1,4 +1,5 @@
 import Layout from "@/components/Layout";
+import { matchesSearch, useSearchParam } from "@/lib/search";
 import { Link } from "wouter";
 import { useState } from "react";
 import { useJobs, useUsers, useAssets, useCreateMutation, useUpdateMutation, useDeleteMutation } from "@/hooks/use-data";
@@ -52,7 +53,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Jobs() {
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useSearchParam();
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -86,10 +87,11 @@ export default function Jobs() {
   const deleteJob = useDeleteMutation("/api/jobs", ["/api/jobs"]);
 
   const filteredJobs = jobsList.filter(job => {
-    const matchesSearch = job.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          job.id.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter ? job.status === statusFilter : true;
-    return matchesSearch && matchesStatus;
+    const asset = assetsList.find((a) => a.id === job.assetId);
+    const assignee = usersList.find((u) => u.id === job.assigneeId);
+    const matchesStatus = !statusFilter ? true : statusFilter === "Not completed" ? job.status !== "Completed" : job.status === statusFilter;
+    return matchesStatus && matchesSearch(searchTerm, job.id, job.title, job.assetId, asset?.name, assignee?.name,
+      job.type, job.priority, job.status, job.description);
   });
 
   const handleCreate = () => {
@@ -323,8 +325,14 @@ export default function Jobs() {
             <DropdownMenuCheckboxItem checked={statusFilter === null} onCheckedChange={() => setStatusFilter(null)}>
               All
             </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem checked={statusFilter === "Not completed"} onCheckedChange={() => setStatusFilter("Not completed")}>
+              Not completed
+            </DropdownMenuCheckboxItem>
             <DropdownMenuCheckboxItem checked={statusFilter === "Open"} onCheckedChange={() => setStatusFilter("Open")}>
               Open
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem checked={statusFilter === "Scheduled"} onCheckedChange={() => setStatusFilter("Scheduled")}>
+              Scheduled
             </DropdownMenuCheckboxItem>
             <DropdownMenuCheckboxItem checked={statusFilter === "In Progress"} onCheckedChange={() => setStatusFilter("In Progress")}>
               In Progress

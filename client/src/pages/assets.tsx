@@ -1,4 +1,5 @@
 import Layout from "@/components/Layout";
+import { matchesSearch, useSearchParam } from "@/lib/search";
 import { useQuery } from "@tanstack/react-query";
 import { useAssets, useLocations, useSites, useInventory, useCreateMutation, useUpdateMutation, useDeleteMutation } from "@/hooks/use-data";
 import { 
@@ -270,7 +271,7 @@ export default function Assets() {
   const { data: inventoryData = [] } = useInventory();
   
   const [uploadedDrawing, setUploadedDrawing] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useSearchParam();
   const { data: spareLinks = [] } = useAllSpares();
   // Tiles or one row per asset; remembered in this browser.
   const [viewMode, setViewMode] = useState<"tiles" | "rows">(() => {
@@ -363,10 +364,8 @@ export default function Assets() {
   };
 
   const filteredAssets = (assets as any[]).filter((asset: any) => {
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    const locName = getLocationName(asset.locationId).toLowerCase();
-    return asset.name.toLowerCase().includes(q) || asset.id.toLowerCase().includes(q) || locName.includes(q);
+    return matchesSearch(searchQuery, asset.id, asset.name, asset.locationId, asset.locationId ? getLocationName(asset.locationId) : null,
+      asset.category, asset.manufacturer, asset.model, asset.serialNumber, asset.status, asset.criticality, asset.parentAssetId);
   });
 
   if (assetsLoading) {
@@ -722,7 +721,7 @@ export default function Assets() {
                         
                         <div className="pl-8 space-y-8 border-l ml-2.5 border-border">
                           {siteLocs.map((loc: any) => {
-                            const locAssets = (assets as any[]).filter((a: any) => a.locationId === loc.id);
+                            const locAssets = filteredAssets.filter((a: any) => a.locationId === loc.id);
                             if (locAssets.length === 0) return null;
                             
                             const activeAssets = locAssets.filter((a: any) => ["Operational", "Maintenance", "Down"].includes(a.status));

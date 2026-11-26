@@ -1,4 +1,5 @@
 import Layout from "@/components/Layout";
+import { matchesSearch, useSearchParam } from "@/lib/search";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CURRENCIES, HOME_CURRENCY, currencySymbol } from "@shared/constants";
 import { useSuppliers, useCreateMutation, useUpdateMutation, useDeleteMutation } from "@/hooks/use-data";
@@ -211,7 +212,7 @@ function SupplierDialog({
 }
 
 export default function Suppliers() {
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useSearchParam();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const { toast } = useToast();
@@ -223,9 +224,8 @@ export default function Suppliers() {
   const updateMutation = useUpdateMutation("/api/suppliers", ["/api/suppliers"]);
   const deleteMutation = useDeleteMutation("/api/suppliers", ["/api/suppliers"]);
 
-  const filteredSuppliers = suppliersList.filter(sup => 
-    sup.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (sup.categories || []).some(c => c.toLowerCase().includes(searchTerm.toLowerCase()))
+  const filteredSuppliers = suppliersList.filter(sup =>
+    matchesSearch(searchTerm, sup.id, sup.name, sup.categories ?? [], sup.contactName, sup.email, sup.phone, sup.currency)
   );
 
   const handleAdd = () => {

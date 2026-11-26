@@ -36,6 +36,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState } from "react";
 import { LogoIcon } from "@/components/Logo";
+import { GlobalSearch } from "@/components/GlobalSearch";
 import { useCurrentUser, useLogout, PLATFORM_ADMIN_ROLE } from "@/hooks/use-auth";
 
 const baseNavigation = [
@@ -141,13 +142,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </SheetContent>
             </Sheet>
             
-            <div className="hidden md:flex relative w-64">
-              <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-              <Input 
-                placeholder="Search jobs, assets..." 
-                className="pl-9 h-9 bg-muted/50 border-none focus-visible:ring-1" 
-              />
-            </div>
+            <GlobalSearch className="hidden md:block w-64" />
           </div>
 
           <div className="flex items-center gap-2 md:gap-4">

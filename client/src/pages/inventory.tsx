@@ -1,4 +1,5 @@
 import Layout from "@/components/Layout";
+import { matchesSearch, useSearchParam } from "@/lib/search";
 import { useInventory, useSuppliers, useAssets, useTransactions, useBins, useStoreRooms, useJobs, useCreateMutation, useUpdateMutation, useDeleteMutation } from "@/hooks/use-data";
 import { PART_UNITS, STOCK_IN_TYPES, STOCK_OUT_TYPES } from "@shared/constants";
 import { 
@@ -83,7 +84,7 @@ export default function Inventory() {
   const transactionsList = transactionsData as StockTransaction[];
 
   const [filterLowStock, setFilterLowStock] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useSearchParam();
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [adjustStockDialogOpen, setAdjustStockDialogOpen] = useState(false);
@@ -175,9 +176,9 @@ export default function Inventory() {
   const filteredInventory = inventoryItems
     .filter(i => !filterLowStock || i.stock < i.minStock)
     .filter(i => {
-      if (!searchQuery) return true;
-      const q = searchQuery.toLowerCase();
-      return i.name.toLowerCase().includes(q) || i.id.toLowerCase().includes(q) || i.category.toLowerCase().includes(q);
+      const bin = binsList.find(b => b.id === i.binId);
+      const supplierNames = suppliersList.filter(s => s.id === i.primarySupplierId || s.id === i.secondarySupplierId).map(s => s.name);
+      return matchesSearch(searchQuery, i.id, i.name, i.category, i.manufacturerPartNo, i.binId, bin?.name, supplierNames);
     });
 
   const totalItems = inventoryItems.reduce((acc, item) => acc + item.stock, 0);

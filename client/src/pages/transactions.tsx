@@ -1,4 +1,5 @@
 import Layout from "@/components/Layout";
+import { matchesSearch } from "@/lib/search";
 import { useTransactions } from "@/hooks/use-data";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -79,8 +80,7 @@ export default function Transactions() {
     const types = FILTERS[filter].types;
     return transactions
       .filter((t) => !types || types.includes(t.type))
-      .filter((t) => !q || [t.partName, t.partId, t.reference, t.jobId, t.assetId, t.id, t.userId]
-        .some((v) => (v ?? "").toLowerCase().includes(q)))
+      .filter((t) => matchesSearch(q, t.partName, t.partId, t.reference, t.jobId, t.assetId, t.id, t.userId, t.type, t.poId))
       .sort((a, b) => (when(b)?.getTime() ?? 0) - (when(a)?.getTime() ?? 0));
   }, [transactions, searchTerm, filter]);
 

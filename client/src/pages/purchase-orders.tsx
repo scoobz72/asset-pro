@@ -1,4 +1,5 @@
 import Layout from "@/components/Layout";
+import { matchesSearch, useSearchParam } from "@/lib/search";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -147,7 +148,7 @@ function ReorderDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpe
 export default function PurchaseOrders() {
   const [, navigate] = useLocation();
   const [view, setView] = useState<View>("open");
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useSearchParam();
   const [editorOpen, setEditorOpen] = useState(false);
   const [reorderOpen, setReorderOpen] = useState(false);
   const { data = [], isLoading } = useQuery<PoSummary[]>({ queryKey: ["/api/purchase-orders"] });
@@ -157,7 +158,7 @@ export default function PurchaseOrders() {
     const q = search.trim().toLowerCase();
     return data
       .filter((po) => !statuses || statuses.includes(po.status))
-      .filter((po) => !q || [po.id, po.vendor, po.jobId, po.requestedBy, po.currency].some((v) => (v ?? "").toLowerCase().includes(q)));
+      .filter((po) => matchesSearch(q, po.id, po.vendor, po.jobId, po.requestedBy, po.currency, po.status));
   }, [data, view, search]);
 
   const counts = useMemo(() => Object.fromEntries((Object.keys(VIEWS) as View[]).map((v) => {

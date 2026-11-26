@@ -14,7 +14,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from "@/hooks/use-toast";
 import { useCurrentUser } from "@/hooks/use-auth";
 import { Badge } from "@/components/ui/badge";
-import { ClipboardEdit, Factory, ShieldCheck, Send, Loader2, Wrench, XCircle, ArrowRight } from "lucide-react";
+import { ClipboardEdit, Factory, ShieldCheck, Send, Loader2, Wrench, XCircle, ArrowRight, Search } from "lucide-react";
+import { matchesSearch } from "@/lib/search";
 import { JOB_TYPES, JOB_PRIORITIES, URGENCY_PRIORITY } from "@shared/constants";
 import { errorMessage } from "@/components/po";
 import { cn } from "@/lib/utils";
@@ -186,6 +187,7 @@ export default function RequestPortal() {
   const [description, setDescription] = useState("");
   const [requestedBy, setRequestedBy] = useState("");
   const [view, setView] = useState<View>("triage");
+  const [reqSearch, setReqSearch] = useState("");
   const [converting, setConverting] = useState<Req | null>(null);
   const [rejecting, setRejecting] = useState<Req | null>(null);
 
@@ -238,7 +240,8 @@ export default function RequestPortal() {
     const st = VIEWS[v].status;
     return [v, st ? requests.filter((r) => r.status === st).length : requests.length];
   })), [requests]);
-  const shown = sorted.filter((r) => !VIEWS[view].status || r.status === VIEWS[view].status);
+  const shown = sorted.filter((r) => (!VIEWS[view].status || r.status === VIEWS[view].status)
+    && matchesSearch(reqSearch, r.id, r.title, r.assetId, r.area, r.urgency, r.description, r.requestedBy, r.status, r.jobId));
 
   const urgencyBadge = (u: string) => {
     if (u === "High") return <Badge variant="destructive">High</Badge>;
@@ -356,6 +359,10 @@ export default function RequestPortal() {
                 ))}
               </TabsList>
             </Tabs>
+            <div className="relative pt-2">
+              <Search className="absolute left-2.5 top-4.5 size-4 text-muted-foreground" />
+              <Input className="pl-9 h-9" placeholder="Search requests, asset, area, requester..." value={reqSearch} onChange={(e) => setReqSearch(e.target.value)} data-testid="input-search-requests" />
+            </div>
           </CardHeader>
           <CardContent className="space-y-3">
             {shown.length === 0 ? (

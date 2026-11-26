@@ -1,4 +1,5 @@
 import Layout from "@/components/Layout";
+import { matchesSearch } from "@/lib/search";
 import { useTemplates, useCreateMutation, useUpdateMutation, useDeleteMutation } from "@/hooks/use-data";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -158,8 +159,7 @@ export default function Templates() {
   };
 
   const filteredTemplates = (templates as any[]).filter((t: any) =>
-    t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (t.description || "").toLowerCase().includes(searchQuery.toLowerCase())
+    matchesSearch(searchQuery, t.id, t.name, t.type, t.description)
   );
 
   const renderFormFields = () => (

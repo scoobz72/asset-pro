@@ -1,4 +1,5 @@
 import Layout from "@/components/Layout";
+import { matchesSearch, useSearchParam } from "@/lib/search";
 import { useAudits, useAssets, useUsers, useLocations } from "@/hooks/use-data";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useMutation } from "@tanstack/react-query";
@@ -64,7 +65,7 @@ const refreshAudits = () => {
 
 export default function Audits() {
   const { toast } = useToast();
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useSearchParam();
   const [isMobileScannerOpen, setIsMobileScannerOpen] = useState(false);
   const [selectedAudit, setSelectedAudit] = useState<string | null>(null);
 
@@ -136,9 +137,9 @@ export default function Audits() {
 
   const isLoading = auditsLoading || assetsLoading;
 
-  const filteredAudits = (audits as any[]).filter((audit: any) => 
-    (audit.assetId || "").toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (audit.assignedTo || "").toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredAudits = (audits as any[]).filter((audit: any) =>
+    matchesSearch(searchTerm, audit.id, audit.assetId, (assets as any[]).find((a: any) => a.id === audit.assetId)?.name,
+      audit.assignedTo, audit.expectedLocation, audit.verifiedLocation, audit.status, audit.scheduledDate, audit.notes)
   );
 
   const getStatusBadge = (status: string) => {
@@ -291,7 +292,7 @@ export default function Audits() {
         <div className="relative max-w-sm flex-1">
           <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
           <Input 
-            placeholder="Search by asset ID or assignee..." 
+            placeholder="Search asset, auditor, location, status..." 
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-9" 

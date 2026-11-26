@@ -1,4 +1,5 @@
 import Layout from "@/components/Layout";
+import { matchesSearch } from "@/lib/search";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -137,7 +138,7 @@ export default function Locations() {
 
   const isLoading = sitesLoading || locsLoading || roomsLoading || binsLoading;
   const q = searchTerm.trim().toLowerCase();
-  const matches = (...texts: (string | null | undefined)[]) => !q || texts.some((t) => t?.toLowerCase().includes(q));
+  const matches = (...texts: (string | null | undefined)[]) => matchesSearch(q, ...texts);
 
   const remove = (mutation: ReturnType<typeof useDeleteMutation>, id: string, what: string) => {
     if (!window.confirm(`Delete ${what} ${id}? This can't be undone.`)) return;
@@ -294,7 +295,8 @@ export default function Locations() {
                 />
                 <div className="divide-y">
                   {visibleRooms.map((room) => {
-                    const roomBins = (bins as Bin[]).filter((b) => b.storeRoomId === room.id);
+                    const roomMatches = siteMatches || matches(room.name, room.id);
+                    const roomBins = (bins as Bin[]).filter((b) => b.storeRoomId === room.id && (roomMatches || matches(b.id, b.description)));
                     return (
                       <div key={room.id} data-testid={`row-store-room-${room.id}`}>
                         <Row

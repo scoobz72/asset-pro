@@ -1,4 +1,5 @@
 import Layout from "@/components/Layout";
+import { matchesSearch } from "@/lib/search";
 import { useState } from "react";
 import { useInventory, useLocations, useBins, useStoreRooms } from "@/hooks/use-data";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -77,8 +78,7 @@ export default function StockTake() {
 
   const filteredInventory = inventory.filter((item: any) => 
     selectedLocations.includes(areaOf(item)) &&
-    (item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-     item.id.toLowerCase().includes(searchQuery.toLowerCase()))
+    matchesSearch(searchQuery, item.id, item.name, item.category, item.manufacturerPartNo, item.binId)
   );
 
   const startStockTake = () => {
