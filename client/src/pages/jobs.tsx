@@ -96,9 +96,7 @@ export default function Jobs() {
       toast({ title: "Error", description: "Title is required", variant: "destructive" });
       return;
     }
-    const jobId = `JOB-${Date.now().toString().slice(-4)}`;
     createJob.mutate({
-      id: jobId,
       title: newTitle,
       assetId: newAssetId || null,
       type: newType || "Breakdown",
@@ -107,8 +105,8 @@ export default function Jobs() {
       assigneeId: newAssigneeId ? parseInt(newAssigneeId) : null,
       dueDate: new Date().toISOString(),
     }, {
-      onSuccess: () => {
-        toast({ title: "Job created", description: `${jobId} created successfully` });
+      onSuccess: (job: any) => {
+        toast({ title: "Job created", description: `${job?.id ?? "Job"} created successfully` });
         setCreateOpen(false);
         setNewTitle("");
         setNewAssetId("");

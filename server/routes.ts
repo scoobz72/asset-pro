@@ -3,6 +3,9 @@ import { type Server } from "http";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
 import { storage } from "./storage";
+import { submitRequest, convertRequest, rejectRequest, RequestError } from "./requests";
+import { nextNumber } from "./numbering";
+import { jobs as jobsTable } from "@shared/schema";
 import { recordMovementNow, recordStockTake, StockError, ukToday } from "./stock/ledger";
 import {
   PoError, listPos, getPo, createPo, updateDraft, runAction, receiveGoods,
@@ -30,6 +33,7 @@ import {
   insertTemplateSchema, updateTemplateSchema,
   stockMovementSchema, stockTakeSchema,
   poDraftSchema, poActionSchema, goodsReceiptSchema, reorderCreateSchema,
+  requestSubmitSchema, requestConvertSchema, requestRejectSchema,
   insertPurchaseOrderSchema, updatePurchaseOrderSchema,
   insertAssetAuditSchema, updateAssetAuditSchema,
   insertMaintenanceRequestSchema, updateMaintenanceRequestSchema,
@@ -364,9 +368,18 @@ export async function registerRoutes(
     res.json(job);
   });
   app.post("/api/jobs", async (req, res) => {
-    const data = parseBody(insertJobSchema, req, res);
+    // The server numbers new jobs (JOB-00001...) unless an ID is given (e.g. by an import).
+    const data = parseBody(insertJobSchema.extend({ id: z.string().trim().min(1).max(50).optional() }), req, res);
     if (!data) return;
-    const job = await storage.createJob(companyOf(req), data);
+    const companyId = companyOf(req);
+    // Numbering and insert in one transaction, so simultaneous jobs never get the same number.
+    const job = await db.transaction(async (tx) => {
+      const id = data.id ?? await nextNumber(tx, "jobs", "JOB", companyId);
+      const [created] = await tx.insert(jobsTable).values({
+        ...data, id, companyId, completedAt: data.status === "Completed" ? new Date() : null,
+      }).returning();
+      return created;
+    });
     res.status(201).json(job);
   });
   app.patch("/api/jobs/:id", async (req, res) => {
@@ -516,19 +529,32 @@ export async function registerRoutes(
     const data = await storage.getMaintenanceRequests(companyOf(req));
     res.json(data);
   });
-  app.post("/api/maintenance-requests", async (req, res) => {
-    const data = parseBody(insertMaintenanceRequestSchema, req, res);
+  // Anyone signed in can submit; the server numbers it (REQ-00001) and stamps the time.
+  const requestActor = (req: Request) => ({ id: req.user!.id, name: req.user!.name, role: req.user!.role });
+  const requestErrors = (fn: (req: Request, res: Response) => Promise<unknown>) => async (req: Request, res: Response) => {
+    try {
+      await fn(req, res);
+    } catch (err) {
+      if (err instanceof RequestError) return res.status(err.status).json({ message: err.message });
+      throw err;
+    }
+  };
+  app.post("/api/maintenance-requests", requestErrors(async (req, res) => {
+    const data = parseBody(requestSubmitSchema, req, res);
     if (!data) return;
-    const request = await storage.createMaintenanceRequest(companyOf(req), data);
-    res.status(201).json(request);
-  });
-  app.patch("/api/maintenance-requests/:id", async (req, res) => {
-    const data = parseUpdate(updateMaintenanceRequestSchema, req, res);
+    res.status(201).json(await submitRequest(companyOf(req), data, requestActor(req)));
+  }));
+  // Triage (Lead/Manager/Admin): turn into a job, or reject with a reason.
+  app.post("/api/maintenance-requests/:id/convert", requestErrors(async (req, res) => {
+    const data = parseBody(requestConvertSchema, req, res);
     if (!data) return;
-    const request = await storage.updateMaintenanceRequest(companyOf(req), String(req.params.id), data);
-    if (!request) return res.status(404).json({ message: "Request not found" });
-    res.json(request);
-  });
+    res.json(await convertRequest(companyOf(req), String(req.params.id), data, requestActor(req)));
+  }));
+  app.post("/api/maintenance-requests/:id/reject", requestErrors(async (req, res) => {
+    const data = parseBody(requestRejectSchema, req, res);
+    if (!data) return;
+    res.json(await rejectRequest(companyOf(req), String(req.params.id), data.reason, requestActor(req)));
+  }));
 
   // ===== PLATFORM ADMIN (manages companies; not company-scoped) =====
   app.get("/api/platform/companies", requirePlatformAdmin, async (_req, res) => {

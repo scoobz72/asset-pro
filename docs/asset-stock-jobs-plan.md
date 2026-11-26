@@ -268,4 +268,12 @@ part of this phase.
 | Phase 2 | Not started |
 | Phase 3 | Not started |
 
-Also done alongside: Assets page Tiles / List switch (26 Nov 2026).
+Also done alongside (26 Nov 2026):
+- Assets page Tiles / List switch.
+- Reports print / Save as PDF layout.
+- Admin-only people management.
+- **Request Portal triage:** a Lead, Manager or Admin turns a request into a job (type,
+  priority, assignee, due date), or rejects it with a reason. The request shows the linked
+  job and its status. Migration `004-request-triage.sql`.
+- **Server-side numbering:** the server numbers requests and new jobs (REQ-00001,
+  JOB-00001…), replacing random or clock-based IDs.

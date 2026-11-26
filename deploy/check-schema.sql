@@ -23,3 +23,4 @@ SELECT id, receipt_id, po_line_id, quantity, transaction_id FROM goods_receipt_l
 SELECT id, po_id, at, action, note FROM po_events LIMIT 0;
 SELECT currency, original_unit_cost, exchange_rate FROM stock_lots LIMIT 0;
 SELECT currency, original_unit_cost, exchange_rate FROM stock_transactions LIMIT 0;
+SELECT job_id, triaged_by, triaged_at, rejection_reason FROM maintenance_requests LIMIT 0;

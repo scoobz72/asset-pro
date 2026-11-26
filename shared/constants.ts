@@ -59,3 +59,11 @@ export const PO_STATUSES = [
 export type PoStatus = (typeof PO_STATUSES)[number];
 /** Statuses where goods are still expected (count as "on order"). */
 export const PO_OPEN_STATUSES = ["Draft", "Pending Approval", "Approved", "Sent", "Partially Received"] as const;
+
+export const JOB_TYPES = ["Breakdown", "Planned", "Request"] as const;
+export const JOB_PRIORITIES = ["Low", "Medium", "High", "Critical"] as const;
+export const REQUEST_URGENCIES = ["Low", "Medium", "High"] as const;
+/** Maintenance request lifecycle: submitted from the portal, then triaged into a job or rejected. */
+export const REQUEST_STATUSES = ["Submitted", "Converted", "Rejected"] as const;
+/** Default job priority for a request's urgency (the triager can change it). */
+export const URGENCY_PRIORITY: Record<string, (typeof JOB_PRIORITIES)[number]> = { Low: "Low", Medium: "Medium", High: "High" };

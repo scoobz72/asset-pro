@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, integer, numeric, timestamp, boolean, jsonb, date, primaryKey, foreignKey, unique, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
-import { LOCATION_TYPES, CRITICALITIES, STOCK_MOVEMENT_TYPES, CURRENCIES, HOME_CURRENCY } from "./constants";
+import { LOCATION_TYPES, CRITICALITIES, STOCK_MOVEMENT_TYPES, CURRENCIES, HOME_CURRENCY, JOB_TYPES, JOB_PRIORITIES, REQUEST_URGENCIES } from "./constants";
 
 /**
  * Multi-company model: every business record carries company_id, and record codes
@@ -400,9 +400,15 @@ export const maintenanceRequests = pgTable("maintenance_requests", {
   description: text("description"),
   status: text("status").notNull().default("Submitted"),
   createdAt: text("created_at"),
+  /** Set when triaged: the job it became, or why it was rejected. */
+  jobId: text("job_id"),
+  triagedBy: text("triaged_by"),
+  triagedAt: timestamp("triaged_at", { withTimezone: true }),
+  rejectionReason: text("rejection_reason"),
   companyId: companyId(),
 }, (t) => [
   primaryKey({ columns: [t.companyId, t.id], name: "maintenance_requests_pkey" }),
+  foreignKey({ name: "maintenance_requests_job_fk", columns: [t.companyId, t.jobId], foreignColumns: [jobs.companyId, jobs.id] }),
 ]);
 
 // Generated identity columns are already excluded by drizzle-zod.
@@ -417,6 +423,8 @@ export const PRIVILEGED_ROLES = ["Manager", "Admin", PLATFORM_ADMIN_ROLE] as con
  * passwords and set PO approval limits. They can also approve any PO regardless of limit.
  */
 export const ADMIN_ROLES = ["Admin", PLATFORM_ADMIN_ROLE] as const;
+/** Who can triage maintenance requests (turn them into jobs or reject them). */
+export const TRIAGE_ROLES = ["Lead", "Manager", "Admin", PLATFORM_ADMIN_ROLE] as const;
 /** Roles a company Manager/Admin may give to their own users. */
 export const USER_ROLES = ["Manager", "Admin", "Lead", "Technician"] as const;
 
@@ -517,6 +525,29 @@ export const goodsReceiptSchema = z.object({
   }).strict()).min(1, "Enter at least one received quantity").max(200),
 }).strict();
 export type GoodsReceiptInput = z.infer<typeof goodsReceiptSchema>;
+
+/** What the portal sends; the server numbers the request and stamps the time. */
+export const requestSubmitSchema = z.object({
+  title: z.string().trim().min(1, "Enter a title").max(200),
+  assetId: z.string().trim().min(1).max(50).optional().nullable(),
+  area: z.string().trim().max(200).optional().nullable(),
+  urgency: z.enum(REQUEST_URGENCIES).default("Medium"),
+  description: z.string().trim().max(4000).optional().nullable(),
+  requestedBy: z.string().trim().max(200).optional().nullable(),
+}).strict();
+
+export const requestConvertSchema = z.object({
+  title: z.string().trim().min(1).max(200).optional(),
+  type: z.enum(JOB_TYPES).default("Request"),
+  priority: z.enum(JOB_PRIORITIES).optional(),
+  assigneeId: z.number().int().positive().optional().nullable(),
+  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  note: z.string().trim().max(1000).optional().nullable(),
+}).strict();
+
+export const requestRejectSchema = z.object({
+  reason: z.string().trim().min(1, "Give a reason").max(1000),
+}).strict();
 
 export const reorderCreateSchema = z.object({
   items: z.array(z.object({
