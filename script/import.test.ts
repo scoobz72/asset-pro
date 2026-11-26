@@ -1,6 +1,6 @@
 /**
  * Excel import tests: parsing, validation and planning (no database needed).
- * Run with: npx tsx --test script/import.test.ts
+ * Run with: npm run test:import
  */
 import assert from "node:assert/strict";
 import test from "node:test";
