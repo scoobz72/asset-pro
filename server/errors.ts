@@ -10,6 +10,8 @@ export function describeErrorForLog(err: any): string {
   const parts = [name];
   if (typeof err?.type === "string") parts.push(`type=${err.type}`);
   if (typeof err?.code === "string") parts.push(`code=${err.code}`);
+  // Drizzle wraps database errors; the Postgres code (e.g. 42703 = missing column) is on the cause.
+  if (typeof err?.cause?.code === "string") parts.push(`dbcode=${err.cause.code}`);
   const status = err?.status || err?.statusCode;
   if (status) parts.push(`status=${status}`);
   const frames =
