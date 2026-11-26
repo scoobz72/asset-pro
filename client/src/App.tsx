@@ -24,8 +24,10 @@ import Auth from "@/pages/auth";
 import Settings from "@/pages/settings";
 import StockTake from "@/pages/stock-take";
 import Landing from "@/pages/landing";
+import Companies from "@/pages/companies";
+import { PLATFORM_ADMIN_ROLE } from "@/hooks/use-auth";
 
-function Router({ defaultLandingPage, setDefaultLandingPage }: any) {
+function Router({ defaultLandingPage, setDefaultLandingPage, isPlatformAdmin }: any) {
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
@@ -43,6 +45,7 @@ function Router({ defaultLandingPage, setDefaultLandingPage }: any) {
       <Route path="/reports" component={Reports} />
       <Route path="/locations" component={Locations} />
       <Route path="/request-portal" component={RequestPortal} />
+      <Route path="/companies">{isPlatformAdmin ? <Companies /> : <NotFound />}</Route>
       <Route path="/settings">
         <Settings 
           defaultLandingPage={defaultLandingPage} 
@@ -57,12 +60,10 @@ function Router({ defaultLandingPage, setDefaultLandingPage }: any) {
 function AppContent() {
   const { data: currentUser, isLoading: authLoading } = useCurrentUser();
   const isAuthenticated = !!currentUser;
-  const [currentCompany, setCurrentCompany] = useState<string | null>(null);
   const [defaultLandingPage, setDefaultLandingPage] = useState("/");
-  const [location, setLocation] = useLocation();
+  const [, setLocation] = useLocation();
 
-  const handleLogin = (companyName?: string) => {
-    if (companyName) setCurrentCompany(companyName);
+  const handleLogin = () => {
     setLocation(defaultLandingPage);
   };
 
@@ -76,10 +77,7 @@ function AppContent() {
         ) : !isAuthenticated ? (
           <Switch>
             <Route path="/login">
-              <Auth onLogin={handleLogin} defaultTab="login" />
-            </Route>
-            <Route path="/register">
-              <Auth onLogin={handleLogin} defaultTab="register" />
+              <Auth onLogin={handleLogin} />
             </Route>
             <Route path="/">
               <Landing />
@@ -90,23 +88,16 @@ function AppContent() {
           </Switch>
         ) : (
           <>
-            {/* Mock Subdomain Banner */}
             <div className="bg-primary text-primary-foreground text-xs py-1.5 px-4 flex justify-between items-center z-50 relative">
-              <div className="flex items-center gap-2 font-mono">
-                <span className="opacity-70">Secured Tenant Domain:</span>
-                <span className="font-semibold">
-                  {currentCompany 
-                    ? `https://${currentCompany.toLowerCase().replace(/[^a-z0-9]/g, '')}.promaintain.app` 
-                    : "https://demo.promaintain.app"}
-                </span>
-              </div>
-              <div className="hidden sm:block opacity-80">
-                {currentCompany ? `${currentCompany} Workspace` : "Demo Workspace"}
-              </div>
+              <span className="font-semibold" data-testid="text-company-name">{currentUser?.companyName}</span>
+              {currentUser?.role === PLATFORM_ADMIN_ROLE && (
+                <span className="opacity-80">Platform admin</span>
+              )}
             </div>
             <Router 
               defaultLandingPage={defaultLandingPage}
               setDefaultLandingPage={setDefaultLandingPage}
+              isPlatformAdmin={currentUser?.role === PLATFORM_ADMIN_ROLE}
             />
           </>
         )}

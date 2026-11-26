@@ -3,7 +3,6 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { setupAuth } from "./auth";
-import { seedDatabaseIfEmpty } from "./seed";
 import { errorHandler } from "./errors";
 
 const app = express();
@@ -53,7 +52,6 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  await seedDatabaseIfEmpty();
   await setupAuth(app);
   await registerRoutes(httpServer, app);
 

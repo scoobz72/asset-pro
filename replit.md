@@ -52,7 +52,13 @@ All prefixed with `/api/`:
 - GET/POST /api/transactions - Stock transaction log
 - POST /api/auth/login, POST /api/auth/logout, GET /api/auth/me - Session authentication
 
-Demo data is seeded on server startup when the database is empty (there is no seed endpoint).
+## Multi-company
+
+Every table has `company_id`; record codes are unique per company (composite primary keys)
+and composite foreign keys stop cross-company links. All storage methods take the signed-in
+user's company (`companyOf(req)`), never a value from the request. `PlatformAdmin` users
+manage companies via `/api/platform/*`; the first one is created from `ADMIN_EMAIL` /
+`ADMIN_BOOTSTRAP_PASSWORD`. There is no demo seed.
 
 ## Authentication & Authorization
 

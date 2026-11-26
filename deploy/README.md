@@ -45,8 +45,8 @@ sudo -u postgres psql -c "CREATE DATABASE assetpro OWNER assetpro;"
 # psql "postgresql://assetpro:$DBPASS@localhost:5432/assetpro" -v ON_ERROR_STOP=1 -f ~/assetpro.sql
 ```
 
-If the database is empty on first start, the app fills it with demo data. The demo
-Manager is `john@promaintain.app`; it has no password until you set one in step 4.
+The app starts with no data: on first start it creates your platform admin account
+(step 4), and you create each customer company from the **Companies** page.
 
 ## 4. Settings
 
@@ -58,10 +58,10 @@ sed -i "s/^SESSION_SECRET=.*/SESSION_SECRET=$(openssl rand -hex 32)/" .env
 nano .env     # check it
 ```
 
-Fresh start only: in `.env`, uncomment and set
-`ADMIN_EMAIL=john@promaintain.app` and `ADMIN_BOOTSTRAP_PASSWORD=` (8+ characters).
-After signing in, change that account to your own email and password in Team, then
-comment both lines out again and run `pm2 restart assetpro`.
+In `.env`, set `ADMIN_EMAIL`, `ADMIN_NAME` and `ADMIN_BOOTSTRAP_PASSWORD` (8+ characters).
+On first start this creates the "MyCMMS HQ" company with you as platform admin. After you
+have signed in, remove the `ADMIN_BOOTSTRAP_PASSWORD` line and run
+`pm2 restart assetpro --update-env`.
 
 ## 5. Build and start
 
@@ -90,6 +90,14 @@ sudo certbot --nginx -d mycmms.co.uk -d www.mycmms.co.uk
 ```
 
 Sign in and check it works, then stop the Replit deployment.
+
+## Companies and users
+
+- **You (platform admin):** Companies page → New company creates the company and its first
+  Manager with a temporary password. Requests from the home page's "Request access" form
+  appear at the top of the same page. Suspending a company signs its users out.
+- **Company Managers/Admins:** Team page → Add Member, or ⋮ → Edit role / reset password.
+- Each email address can belong to only one company.
 
 ## Updates
 

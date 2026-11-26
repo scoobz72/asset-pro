@@ -8,7 +8,12 @@ export type AuthUser = {
   status: string;
   avatar: string | null;
   email: string | null;
+  companyId: number;
+  companyName: string;
 };
+
+export const PLATFORM_ADMIN_ROLE = "PlatformAdmin";
+export const PRIVILEGED_ROLES = ["Manager", "Admin", PLATFORM_ADMIN_ROLE];
 
 export const AUTH_QUERY_KEY = ["/api/auth/me"];
 

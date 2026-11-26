@@ -3,11 +3,11 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db, pool } from "./db";
 import { storage } from "./storage";
 import { hashPassword, verifyPassword } from "./password";
-import { users, loginSchema, PRIVILEGED_ROLES, type PublicUser } from "@shared/schema";
+import { users, companies, loginSchema, accessRequestInputSchema, PRIVILEGED_ROLES, PLATFORM_ADMIN_ROLE, type PublicUser } from "@shared/schema";
 
 declare global {
   namespace Express {
@@ -43,8 +43,9 @@ async function ensureSessionTable() {
  * Credential hygiene performed at startup:
  * - Any password that is not a recognised hash was stored in plaintext by an earlier
  *   version of the app (and exposed through the API), so it is cleared.
- * - If ADMIN_BOOTSTRAP_PASSWORD is set and the bootstrap admin has no password yet,
- *   it is hashed and assigned so the first administrator can sign in.
+ * - If ADMIN_EMAIL and ADMIN_BOOTSTRAP_PASSWORD are set and there is no platform admin
+ *   yet, the platform's own company and its admin account are created. If the platform
+ *   admin exists but has no password, the bootstrap password is assigned to it.
  */
 async function prepareCredentials() {
   const cleared = await db
@@ -57,35 +58,62 @@ async function prepareCredentials() {
   }
 
   const bootstrapPassword = process.env.ADMIN_BOOTSTRAP_PASSWORD;
-  if (!bootstrapPassword) return;
+  const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+  if (!bootstrapPassword || !adminEmail) return;
   if (bootstrapPassword.length < 8) {
     console.warn("[auth] ADMIN_BOOTSTRAP_PASSWORD is shorter than 8 characters and was ignored.");
     return;
   }
 
-  const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
-  const [target] = await db
-    .select({ id: users.id, email: users.email })
+  const [platformAdmin] = await db
+    .select({ id: users.id, email: users.email, password: users.password })
     .from(users)
-    .where(
-      adminEmail
-        ? and(eq(sql`lower(${users.email})`, adminEmail), isNull(users.password))
-        : and(inArray(users.role, [...PRIVILEGED_ROLES]), isNull(users.password)),
-    )
+    .where(eq(users.role, PLATFORM_ADMIN_ROLE))
     .orderBy(users.id)
     .limit(1);
-  if (!target) return;
 
-  // Only bootstrap when no privileged account can sign in yet.
-  const [existingAdmin] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(sql`${users.password} IS NOT NULL AND ${inArray(users.role, [...PRIVILEGED_ROLES])}`)
-    .limit(1);
-  if (existingAdmin) return;
+  if (platformAdmin) {
+    // Recovery only: give the existing platform admin a password if it has none.
+    if (!platformAdmin.password) {
+      await db.update(users).set({ password: await hashPassword(bootstrapPassword) }).where(eq(users.id, platformAdmin.id));
+      console.log(`[auth] Bootstrap password assigned to platform admin ${platformAdmin.email ?? `#${platformAdmin.id}`}.`);
+    }
+    return;
+  }
 
-  await db.update(users).set({ password: await hashPassword(bootstrapPassword) }).where(eq(users.id, target.id));
-  console.log(`[auth] Bootstrap password assigned to administrator account ${target.email ?? `#${target.id}`}.`);
+  // First start: create the platform's own company and its admin account.
+  const [existing] = await db.select({ id: users.id }).from(users).where(eq(sql`lower(${users.email})`, adminEmail)).limit(1);
+  if (existing) {
+    console.warn(`[auth] ${adminEmail} already belongs to a company, so it was not made platform admin.`);
+    return;
+  }
+  const passwordHash = await hashPassword(bootstrapPassword);
+  await db.transaction(async (tx) => {
+    const [hq] = await tx.insert(companies).values({ name: process.env.PLATFORM_COMPANY_NAME?.trim() || "MyCMMS HQ" }).returning();
+    await tx.insert(users).values({
+      companyId: hq.id,
+      name: process.env.ADMIN_NAME?.trim() || "Platform Admin",
+      email: adminEmail,
+      role: PLATFORM_ADMIN_ROLE,
+      status: "Available",
+      password: passwordHash,
+    });
+  });
+  console.log(`[auth] Created platform admin ${adminEmail}.`);
+}
+
+/** Simple fixed-window limiter for the public access-request form. */
+const accessRequestHits = new Map<string, { count: number; resetAt: number }>();
+function allowAccessRequest(ip: string): boolean {
+  const now = Date.now();
+  const entry = accessRequestHits.get(ip);
+  if (!entry || entry.resetAt < now) {
+    accessRequestHits.set(ip, { count: 1, resetAt: now + 60 * 60 * 1000 });
+    if (accessRequestHits.size > 10_000) accessRequestHits.clear();
+    return true;
+  }
+  entry.count += 1;
+  return entry.count <= 5;
 }
 
 export async function setupAuth(app: Express) {
@@ -127,6 +155,10 @@ export async function setupAuth(app: Express) {
         if (!(await verifyPassword(password, record.password))) {
           return done(null, false);
         }
+        const company = await storage.getCompany(record.companyId);
+        if (!company || company.status !== "Active") {
+          return done(null, false, { message: "suspended" });
+        }
         const { password: _omit, ...publicUser } = record;
         return done(null, publicUser);
       } catch (err) {
@@ -139,7 +171,10 @@ export async function setupAuth(app: Express) {
     try {
       // Reload on every request so role changes and removals take effect immediately.
       const user = await storage.getUser(id);
-      done(null, user ?? false);
+      if (!user) return done(null, false);
+      // A suspended company's users are signed out on their next request.
+      const company = await storage.getCompany(user.companyId);
+      done(null, company?.status === "Active" ? user : false);
     } catch (err) {
       done(err);
     }
@@ -154,12 +189,19 @@ export async function setupAuth(app: Express) {
       return res.status(400).json({ message: "Email and password are required" });
     }
     req.body = parsed.data;
-    passport.authenticate("local", (err: unknown, user: Express.User | false) => {
+    passport.authenticate("local", (err: unknown, user: Express.User | false, info?: unknown) => {
       if (err) return next(err);
+      if (!user && (info as { message?: string } | undefined)?.message === "suspended") {
+        return res.status(403).json({ message: "This company's account is suspended. Please contact support." });
+      }
       if (!user) return res.status(401).json({ message: "Invalid email or password" });
-      req.login(user, (loginErr) => {
+      req.login(user, async (loginErr) => {
         if (loginErr) return next(loginErr);
-        res.json(user);
+        try {
+          res.json(await sessionUser(user));
+        } catch (e) {
+          next(e);
+        }
       });
     })(req, res, next);
   });
@@ -175,13 +217,61 @@ export async function setupAuth(app: Express) {
     });
   });
 
-  app.get("/api/auth/me", (req, res) => {
-    if (!req.isAuthenticated()) return res.status(401).json({ message: "Not authenticated" });
-    res.json(req.user);
+  app.get("/api/auth/me", async (req, res, next) => {
+    if (!req.isAuthenticated() || !req.user) return res.status(401).json({ message: "Not authenticated" });
+    try {
+      res.json(await sessionUser(req.user));
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  // Public "Request access" form on the landing page.
+  app.post("/api/access-requests", async (req, res, next) => {
+    try {
+      if (!allowAccessRequest(req.ip ?? "unknown")) {
+        return res.status(429).json({ message: "Too many requests. Please try again later." });
+      }
+      const parsed = accessRequestInputSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Please check the form and try again." });
+      }
+      const { website: _honeypot, ...data } = parsed.data;
+      await storage.createAccessRequest(data);
+      res.status(201).json({ ok: true });
+    } catch (e) {
+      next(e);
+    }
   });
 
   // Every other /api route requires a signed-in user.
   app.use("/api", requireAuth);
+}
+
+async function sessionUser(user: Express.User) {
+  const company = await storage.getCompany(user.companyId);
+  return { ...user, companyName: company?.name ?? "" };
+}
+
+/** The signed-in user's company. Only call on routes behind requireAuth. */
+export function companyOf(req: Request): number {
+  if (!req.user) throw Object.assign(new Error("Not authenticated"), { status: 401 });
+  return req.user.companyId;
+}
+
+export function isPlatformAdmin(user: Express.User | undefined): boolean {
+  return user?.role === PLATFORM_ADMIN_ROLE;
+}
+
+/** Restricts a route to the platform admin. */
+export function requirePlatformAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.isAuthenticated() || !req.user) {
+    return res.status(401).json({ message: "Authentication required" });
+  }
+  if (!isPlatformAdmin(req.user)) {
+    return res.status(403).json({ message: "You do not have permission to perform this action" });
+  }
+  next();
 }
 
 export const requireAuth: RequestHandler = (req, res, next) => {

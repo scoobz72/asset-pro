@@ -19,7 +19,19 @@ export function describeErrorForLog(err: any): string {
   return frames ? `${parts.join(" ")}\n${frames}` : parts.join(" ");
 }
 
+/** Postgres constraint errors (possibly wrapped by Drizzle) mapped to client errors. */
+function constraintStatus(err: any): { status: number; message: string } | undefined {
+  const code = err?.code ?? err?.cause?.code;
+  if (code === "23505") return { status: 409, message: "A record with that ID or email already exists" };
+  if (code === "23503") return { status: 400, message: "A linked record does not exist, or this record is still in use" };
+  return undefined;
+}
+
 export function errorHandler(err: any, _req: Request, res: Response, next: NextFunction) {
+  const constraint = constraintStatus(err);
+  if (constraint && !res.headersSent) {
+    return res.status(constraint.status).json({ message: constraint.message });
+  }
   const status = Number(err?.status || err?.statusCode) || 500;
 
   if (status >= 500) {

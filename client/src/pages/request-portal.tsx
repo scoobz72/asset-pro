@@ -111,9 +111,6 @@ export default function RequestPortal() {
           <Badge variant="secondary" className="bg-primary/10 text-primary border border-primary/20">
             Request → Job (Type: Request)
           </Badge>
-          <Badge variant="outline" className="font-mono">
-            Demo Mode
-          </Badge>
         </div>
       </div>
 

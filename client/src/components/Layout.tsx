@@ -19,7 +19,8 @@ import {
   Truck,
   ScanLine,
   MapPin,
-  ClipboardEdit
+  ClipboardEdit,
+  Building2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,9 +35,9 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState } from "react";
-import { useCurrentUser, useLogout } from "@/hooks/use-auth";
+import { useCurrentUser, useLogout, PLATFORM_ADMIN_ROLE } from "@/hooks/use-auth";
 
-const navigation = [
+const baseNavigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Request Portal', href: '/request-portal', icon: ClipboardEdit },
   { name: 'Jobs', href: '/jobs', icon: ClipboardList },
@@ -57,6 +58,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
   const { data: currentUser } = useCurrentUser();
   const logout = useLogout();
+  const navigation = currentUser?.role === PLATFORM_ADMIN_ROLE
+    ? [{ name: 'Companies', href: '/companies', icon: Building2 }, ...baseNavigation]
+    : baseNavigation;
   const initials = (currentUser?.name || "").split(" ").map((n) => n[0]).join("").slice(0, 2);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
