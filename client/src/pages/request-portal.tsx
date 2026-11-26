@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 /** Who can triage requests: must match TRIAGE_ROLES on the server. */
 const TRIAGE_ROLES = ["Lead", "Manager", "Admin", "PlatformAdmin"];
 
-type Req = {
+export type Req = {
   id: string; title: string; assetId: string | null; area: string | null; urgency: string; description: string | null;
   requestedBy: string; status: string; createdAt: string | null; jobId: string | null; triagedBy: string | null;
   triagedAt: string | null; rejectionReason: string | null;
@@ -37,14 +37,14 @@ const VIEWS = {
 type View = keyof typeof VIEWS;
 
 function invalidate() {
-  for (const key of ["/api/maintenance-requests", "/api/jobs", "/api/dashboard/summary"]) {
+  for (const key of ["/api/maintenance-requests", "/api/jobs", "/api/dashboard/summary", "/api/calendar"]) {
     queryClient.invalidateQueries({ queryKey: [key] });
   }
 }
 
 const when = (d: string | null) => (d ? new Date(d).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
 
-function ConvertDialog({ request, onClose }: { request: Req | null; onClose: () => void }) {
+export function ConvertDialog({ request, onClose }: { request: Req | null; onClose: () => void }) {
   const { toast } = useToast();
   const { data: users = [] } = useUsers();
   const [title, setTitle] = useState("");
@@ -136,7 +136,7 @@ function ConvertDialog({ request, onClose }: { request: Req | null; onClose: () 
   );
 }
 
-function RejectDialog({ request, onClose }: { request: Req | null; onClose: () => void }) {
+export function RejectDialog({ request, onClose }: { request: Req | null; onClose: () => void }) {
   const { toast } = useToast();
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);

@@ -277,3 +277,8 @@ Also done alongside (26 Nov 2026):
   job and its status. Migration `004-request-triage.sql`.
 - **Server-side numbering:** the server numbers requests and new jobs (REQ-00001,
   JOB-00001…), replacing random or clock-based IDs.
+- **Calendar** (`GET /api/calendar`, `server/calendar.ts`): planned work, other jobs,
+  requests to triage, asset audits and expected PO deliveries, filtered to what the
+  signed-in person can action. Each item can be actioned from its day (start or complete
+  a job, triage a request, open an audit or PO). Overdue items are listed above the month,
+  and each layer can be switched on or off. PPM schedules (1.3) will appear here once built.

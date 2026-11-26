@@ -75,7 +75,7 @@ export function useMaintenanceRequests() {
 
 /** Any write can change the dashboard figures, so they are always refreshed too. */
 function invalidateAfterWrite(keys: string[]) {
-  [...keys, "/api/dashboard/summary"].forEach(key => {
+  [...keys, "/api/dashboard/summary", "/api/calendar"].forEach(key => {
     queryClient.invalidateQueries({ queryKey: [key] });
   });
 }

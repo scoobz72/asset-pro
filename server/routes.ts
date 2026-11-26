@@ -5,6 +5,7 @@ import { fromZodError } from "zod-validation-error";
 import { storage } from "./storage";
 import { submitRequest, convertRequest, rejectRequest, RequestError } from "./requests";
 import { nextNumber } from "./numbering";
+import { calendarItems } from "./calendar";
 import { jobs as jobsTable } from "@shared/schema";
 import { recordMovementNow, recordStockTake, StockError, ukToday } from "./stock/ledger";
 import {
@@ -255,6 +256,20 @@ export async function registerRoutes(
   });
   app.post("/api/import/preview", requirePrivileged, xlsxBody, (req, res) => runImport(req, res, previewImport));
   app.post("/api/import/commit", requirePrivileged, xlsxBody, (req, res) => runImport(req, res, commitImport));
+
+  // ===== CALENDAR: everything the signed-in person can action, by date =====
+  app.get("/api/calendar", async (req, res) => {
+    const iso = /^\d{4}-\d{2}-\d{2}$/;
+    const from = String(req.query.from ?? "");
+    const to = String(req.query.to ?? "");
+    if (!iso.test(from) || !iso.test(to) || from > to) {
+      return res.status(400).json({ message: "Give from and to as YYYY-MM-DD" });
+    }
+    if ((Date.parse(to) - Date.parse(from)) / 86400000 > 100) {
+      return res.status(400).json({ message: "The calendar range can be at most 100 days" });
+    }
+    res.json(await calendarItems(companyOf(req), { id: req.user!.id, name: req.user!.name, role: req.user!.role }, from, to));
+  });
 
   // ===== DASHBOARD =====
   app.get("/api/dashboard/summary", async (req, res) => {
