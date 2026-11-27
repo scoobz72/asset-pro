@@ -47,7 +47,7 @@ export function StockList() {
   const { data: parts = [], isLoading } = useInventory();
   const { data: common = [] } = useQuery<Common>({ queryKey: ["/api/assets", enc(assetId ?? ""), "common-parts"], enabled: !!assetId });
   const [q, setQ] = useState("");
-  const [lowOnly, setLowOnly] = useState(false);
+  const [lowOnly, setLowOnly] = useState(params.get("low") === "1");
   const list = useMemo(() => (parts as Part[])
     .filter((p) => (!lowOnly || p.stock <= p.minStock) && matchesSearch(q, p.id, p.name, p.category, p.manufacturerPartNo, p.binId))
     .slice(0, 100), [parts, q, lowOnly]);

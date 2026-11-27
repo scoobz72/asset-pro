@@ -71,3 +71,18 @@ export const URGENCY_PRIORITY: Record<string, (typeof JOB_PRIORITIES)[number]> =
 export const ABSENCE_REASONS = ["Holiday", "Sickness", "Training", "Other"] as const;
 /** Utilisation target band shown on reports (booked job hours ÷ shift hours). */
 export const UTILISATION_TARGET = { low: 0.7, high: 0.85 } as const;
+
+/**
+ * Notification kinds. `roles` = who can receive it (null = everyone); `defaultOn` = roles it's on for
+ * until the person changes it. Phone push follows the same default once they've enabled push on a device.
+ */
+const LEADS = ["Lead", "Manager", "Admin", "PlatformAdmin"];
+export const NOTIFY_KINDS = {
+  job_assigned: { label: "Jobs assigned to me", help: "When a job is given to you, or a request is turned into a job for you.", roles: null, defaultOn: null },
+  request_new: { label: "New fault requests", help: "Each request submitted on the Request Portal or the mobile app, for triage.", roles: LEADS, defaultOn: LEADS },
+  job_unassigned: { label: "New jobs with nobody assigned", help: "A job was created but no one has it yet.", roles: LEADS, defaultOn: LEADS },
+  request_update: { label: "Updates on my requests", help: "When a request you raised becomes a job, or is rejected.", roles: null, defaultOn: null },
+  stock_daily: { label: "Daily stock summary", help: "Each morning at 7:00: parts out of stock and at or below their minimum.", roles: null, defaultOn: LEADS },
+} as const;
+export type NotifyKind = keyof typeof NOTIFY_KINDS;
+export const STOCK_DIGEST_HOUR = 7;

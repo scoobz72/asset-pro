@@ -48,6 +48,8 @@ export const users = pgTable("users", {
   poApprovalLimit: numeric("po_approval_limit", { precision: 14, scale: 2 }),
   /** Labour cost per hour (home currency); copied onto each time entry when booked. */
   hourlyRate: numeric("hourly_rate", { precision: 8, scale: 2 }),
+  /** Per-kind notification choices: { "job_assigned": { "app": true, "push": false }, ... }. Missing = role default. */
+  notifyPrefs: jsonb("notify_prefs").$type<Record<string, { app?: boolean; push?: boolean }>>().notNull().default({}),
   companyId: companyId(),
 }, (t) => [
   unique("users_company_id_id_key").on(t.companyId, t.id),
@@ -274,6 +276,61 @@ export const jobLabour = pgTable("job_labour", {
   index("job_labour_user_date_idx").on(t.companyId, t.userId, t.workDate),
   index("job_labour_job_idx").on(t.companyId, t.jobId),
 ]);
+
+/** In-app notifications (the bell). Phone pushes are sent alongside, per the user's settings. */
+export const notifications = pgTable("notifications", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  userId: integer("user_id").notNull(),
+  kind: text("kind").notNull(),
+  title: text("title").notNull(),
+  body: text("body"),
+  link: text("link"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  readAt: timestamp("read_at", { withTimezone: true }),
+  companyId: companyId(),
+}, (t) => [
+  foreignKey({ name: "notifications_user_fk", columns: [t.companyId, t.userId], foreignColumns: [users.companyId, users.id] }).onDelete("cascade"),
+  index("notifications_user_idx").on(t.companyId, t.userId, t.createdAt),
+]);
+export type Notification = typeof notifications.$inferSelect;
+
+/** A browser or phone that accepted Web Push for a user. */
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  userId: integer("user_id").notNull(),
+  endpoint: text("endpoint").notNull(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  lastOkAt: timestamp("last_ok_at", { withTimezone: true }),
+  companyId: companyId(),
+}, (t) => [
+  unique("push_subscriptions_endpoint_key").on(t.endpoint),
+  foreignKey({ name: "push_subscriptions_user_fk", columns: [t.companyId, t.userId], foreignColumns: [users.companyId, users.id] }).onDelete("cascade"),
+]);
+
+/** Records that a once-a-day job (e.g. the stock summary) ran, so it runs once per company per day. */
+export const notificationRuns = pgTable("notification_runs", {
+  companyId: integer("company_id").notNull(),
+  kind: text("kind").notNull(),
+  runDate: date("run_date").notNull(),
+  ranAt: timestamp("ran_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ name: "notification_runs_pkey", columns: [t.companyId, t.kind, t.runDate] })]);
+
+/** Server-wide settings, such as the generated Web Push key pair. */
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const pushSubscribeSchema = z.object({
+  endpoint: z.string().url().max(1000).refine((u) => u.startsWith("https://"), "Push endpoints must be https"),
+  keys: z.object({ p256dh: z.string().min(80).max(100), auth: z.string().min(16).max(40) }),
+}).passthrough();
+
+export const notifyPrefsSchema = z.record(z.string().max(40), z.object({ app: z.boolean().optional(), push: z.boolean().optional() }).strict());
 
 /** The mobile app's job timer: at most one per engineer. started_at is null while paused. */
 export const jobTimers = pgTable("job_timers", {
@@ -525,7 +582,7 @@ export const insertUserSchema = createInsertSchema(users, {
   role: () => z.enum(USER_ROLES).optional(),
   email: () => z.string().trim().toLowerCase().email().max(320).nullable().optional(),
   password: () => z.string().min(8).max(200).nullable().optional(),
-}).omit({ companyId: true });
+}).omit({ companyId: true, notifyPrefs: true });
 export const insertSiteSchema = createInsertSchema(sites).omit({ companyId: true });
 export const insertLocationSchema = createInsertSchema(locations, {
   type: () => z.enum(LOCATION_TYPES).optional(),

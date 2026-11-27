@@ -10,8 +10,12 @@ import { getJobDetail, addLabour, deleteLabour, addNote, createFollowUpJob, JobE
 import { getShifts, savePattern, deletePattern, addAbsence, deleteAbsence, ShiftError } from "./people/shifts";
 import { engineeringKpis } from "./kpi/kpis";
 import { scheduleAreaAudit, scheduleAuditSchema, AuditError } from "./audits";
+import {
+  onJobCreated, onJobAssigned, listNotifications, unreadCount, markRead, resolvePrefs, getVapid, sendTestPush, sendStockSummary,
+  stockSummary, startNotificationScheduler,
+} from "./notify";
 import { myDay, getTimer, startTimer, pauseTimer, stopTimer, timerStopSchema, lookupCode, commonPartsForAsset } from "./mobile";
-import { jobs as jobsTable, assetAudits as assetAuditsTable } from "@shared/schema";
+import { jobs as jobsTable, assetAudits as assetAuditsTable, users as usersTable, pushSubscriptions as pushSubscriptionsTable, pushSubscribeSchema, notifyPrefsSchema } from "@shared/schema";
 import { recordMovementNow, recordStockTake, StockError, ukToday } from "./stock/ledger";
 import {
   PoError, listPos, getPo, createPo, updateDraft, runAction, receiveGoods,
@@ -19,7 +23,8 @@ import {
 } from "./purchasing/po";
 import { quoteRate } from "./purchasing/rates";
 import { db } from "./db";
-import { CURRENCIES, HOME_CURRENCY } from "@shared/constants";
+import { CURRENCIES, HOME_CURRENCY, NOTIFY_KINDS } from "@shared/constants";
+import { and, eq } from "drizzle-orm";
 import { previewImport, commitImport, ImportInvalidError } from "./import/commit";
 import { ImportFileError } from "./import/parse";
 import { buildWorkbook, XLSX_MIME } from "./import/template";
@@ -488,13 +493,20 @@ export async function registerRoutes(
       }).returning();
       return created;
     });
+    onJobCreated(companyId, job, req.user?.id);
     res.status(201).json(job);
   });
   app.patch("/api/jobs/:id", async (req, res) => {
     const data = parseUpdate(updateJobSchema, req, res);
     if (!data) return;
-    const job = await storage.updateJob(companyOf(req), String(req.params.id), data);
+    const companyId = companyOf(req);
+    const before = data.assigneeId !== undefined ? await storage.getJob(companyId, String(req.params.id)) : undefined;
+    const job = await storage.updateJob(companyId, String(req.params.id), data);
     if (!job) return res.status(404).json({ message: "Job not found" });
+    // Tell the new assignee (not when someone takes a job themselves).
+    if (data.assigneeId && before && before.assigneeId !== data.assigneeId && job.status !== "Completed") {
+      onJobAssigned(companyId, job, req.user?.id);
+    }
     res.json(job);
   });
   app.delete("/api/jobs/:id", requirePrivileged, async (req, res) => {
@@ -730,6 +742,84 @@ export async function registerRoutes(
     if (!request) return res.status(404).json({ message: "Request not found" });
     res.json(request);
   });
+
+  // ===== NOTIFICATIONS =====
+  app.get("/api/notifications", async (req, res) => {
+    res.json(await listNotifications(companyOf(req), req.user!.id, Math.min(100, Number(req.query.limit) || 40)));
+  });
+  app.get("/api/notifications/unread-count", async (req, res) => {
+    res.json({ unread: await unreadCount(companyOf(req), req.user!.id) });
+  });
+  app.post("/api/notifications/read-all", async (req, res) => {
+    await markRead(companyOf(req), req.user!.id);
+    res.json({ ok: true });
+  });
+  app.post("/api/notifications/:id/read", async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: "Bad id" });
+    await markRead(companyOf(req), req.user!.id, id);
+    res.json({ ok: true });
+  });
+  app.get("/api/notifications/settings", async (req, res) => {
+    const companyId = companyOf(req);
+    const [me] = await db.select({ role: usersTable.role, notifyPrefs: usersTable.notifyPrefs }).from(usersTable)
+      .where(and(eq(usersTable.companyId, companyId), eq(usersTable.id, req.user!.id)));
+    const devices = await db.select({ id: pushSubscriptionsTable.id, userAgent: pushSubscriptionsTable.userAgent, createdAt: pushSubscriptionsTable.createdAt, endpoint: pushSubscriptionsTable.endpoint })
+      .from(pushSubscriptionsTable).where(and(eq(pushSubscriptionsTable.companyId, companyId), eq(pushSubscriptionsTable.userId, req.user!.id)));
+    res.json({
+      kinds: resolvePrefs(me?.role ?? req.user!.role, me?.notifyPrefs ?? {}),
+      vapidPublicKey: (await getVapid()).publicKey,
+      devices: devices.map((d) => ({ id: d.id, userAgent: d.userAgent, createdAt: d.createdAt, endpointHost: new URL(d.endpoint).host, endpoint: d.endpoint })),
+    });
+  });
+  app.put("/api/notifications/settings", async (req, res) => {
+    const data = parseBody(notifyPrefsSchema, req, res);
+    if (!data) return;
+    const companyId = companyOf(req);
+    const [me] = await db.select({ notifyPrefs: usersTable.notifyPrefs }).from(usersTable)
+      .where(and(eq(usersTable.companyId, companyId), eq(usersTable.id, req.user!.id)));
+    const merged = { ...(me?.notifyPrefs ?? {}) } as Record<string, { app?: boolean; push?: boolean }>;
+    for (const [kind, v] of Object.entries(data)) {
+      if (!(kind in NOTIFY_KINDS)) continue;
+      merged[kind] = { ...(merged[kind] ?? {}), ...v };
+    }
+    await db.update(usersTable).set({ notifyPrefs: merged }).where(and(eq(usersTable.companyId, companyId), eq(usersTable.id, req.user!.id)));
+    res.json({ kinds: resolvePrefs(req.user!.role, merged) });
+  });
+  app.post("/api/push/subscribe", async (req, res) => {
+    const data = parseBody(pushSubscribeSchema, req, res);
+    if (!data) return;
+    const companyId = companyOf(req);
+    const ua = String(req.headers["user-agent"] ?? "").slice(0, 300);
+    // One row per browser endpoint; re-subscribing moves it to whoever is signed in now.
+    await db.insert(pushSubscriptionsTable).values({
+      companyId, userId: req.user!.id, endpoint: data.endpoint, p256dh: data.keys.p256dh, auth: data.keys.auth, userAgent: ua,
+    }).onConflictDoUpdate({
+      target: pushSubscriptionsTable.endpoint,
+      set: { companyId, userId: req.user!.id, p256dh: data.keys.p256dh, auth: data.keys.auth, userAgent: ua },
+    });
+    res.status(201).json({ ok: true });
+  });
+  app.post("/api/push/unsubscribe", async (req, res) => {
+    const endpoint = typeof req.body?.endpoint === "string" ? req.body.endpoint : "";
+    const id = Number(req.body?.id);
+    const companyId = companyOf(req);
+    const mine = and(eq(pushSubscriptionsTable.companyId, companyId), eq(pushSubscriptionsTable.userId, req.user!.id));
+    if (endpoint) await db.delete(pushSubscriptionsTable).where(and(mine, eq(pushSubscriptionsTable.endpoint, endpoint)));
+    else if (Number.isInteger(id) && id > 0) await db.delete(pushSubscriptionsTable).where(and(mine, eq(pushSubscriptionsTable.id, id)));
+    res.json({ ok: true });
+  });
+  app.post("/api/push/test", async (req, res) => {
+    res.json(await sendTestPush(companyOf(req), req.user!.id));
+  });
+  // The daily stock summary: preview it, or send it now (Managers/Admins).
+  app.get("/api/notifications/stock-summary", async (req, res) => {
+    res.json(await stockSummary(companyOf(req)));
+  });
+  app.post("/api/notifications/stock-summary/send", requirePrivileged, async (req, res) => {
+    res.json(await sendStockSummary(companyOf(req)));
+  });
+  startNotificationScheduler();
 
   // Unknown /api routes must not fall through to the SPA handler.
   app.use("/api", (_req, res) => {

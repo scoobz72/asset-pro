@@ -9,6 +9,7 @@ import { URGENCY_PRIORITY } from "@shared/constants";
 import type { z } from "zod";
 import type { requestSubmitSchema, requestConvertSchema } from "@shared/schema";
 import { nextNumber } from "./numbering";
+import { onRequestSubmitted, onRequestConverted, onRequestRejected } from "./notify";
 
 export class RequestError extends Error {
   constructor(message: string, public status = 400) {
@@ -26,8 +27,8 @@ async function checkAsset(tx: any, companyId: number, assetId: string | null | u
   if (!a) throw new RequestError(`Asset ${assetId} not found`, 404);
 }
 
-export function submitRequest(companyId: number, input: z.infer<typeof requestSubmitSchema>, actor: RequestActor) {
-  return db.transaction(async (tx) => {
+export async function submitRequest(companyId: number, input: z.infer<typeof requestSubmitSchema>, actor: RequestActor) {
+  const created = await db.transaction(async (tx) => {
     await checkAsset(tx, companyId, input.assetId);
     const id = await nextNumber(tx, "maintenance_requests", "REQ", companyId);
     const [created] = await tx.insert(maintenanceRequests).values({
@@ -44,6 +45,8 @@ export function submitRequest(companyId: number, input: z.infer<typeof requestSu
     }).returning();
     return created;
   });
+  onRequestSubmitted(companyId, created, actor.id);
+  return created;
 }
 
 async function lockRequest(tx: any, companyId: number, id: string) {
@@ -58,9 +61,9 @@ async function lockRequest(tx: any, companyId: number, id: string) {
 }
 
 /** Turns a request into a job (one job per request) and links them. */
-export function convertRequest(companyId: number, id: string, input: z.infer<typeof requestConvertSchema>, actor: RequestActor) {
+export async function convertRequest(companyId: number, id: string, input: z.infer<typeof requestConvertSchema>, actor: RequestActor) {
   if (!canTriage(actor.role)) throw new RequestError("Only a Lead, Manager or Admin can triage requests.", 403);
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const request = await lockRequest(tx, companyId, id);
     if (input.assigneeId) {
       const [u] = await tx.select({ id: users.id }).from(users).where(and(eq(users.companyId, companyId), eq(users.id, input.assigneeId)));
@@ -84,15 +87,19 @@ export function convertRequest(companyId: number, id: string, input: z.infer<typ
     }).where(and(eq(maintenanceRequests.companyId, companyId), eq(maintenanceRequests.id, id))).returning();
     return { request: updated, job };
   });
+  void onRequestConverted(companyId, result.request, result.job, actor.id);
+  return result;
 }
 
-export function rejectRequest(companyId: number, id: string, reason: string, actor: RequestActor) {
+export async function rejectRequest(companyId: number, id: string, reason: string, actor: RequestActor) {
   if (!canTriage(actor.role)) throw new RequestError("Only a Lead, Manager or Admin can triage requests.", 403);
-  return db.transaction(async (tx) => {
+  const updated = await db.transaction(async (tx) => {
     await lockRequest(tx, companyId, id);
     const [updated] = await tx.update(maintenanceRequests).set({
       status: "Rejected", rejectionReason: reason, triagedBy: actor.name, triagedAt: new Date(),
     }).where(and(eq(maintenanceRequests.companyId, companyId), eq(maintenanceRequests.id, id))).returning();
     return updated;
   });
+  void onRequestRejected(companyId, updated, actor.id);
+  return updated;
 }

@@ -304,3 +304,22 @@ Same sign-in, data and permissions as the full site. Screens (`client/src/mobile
 Server: `server/mobile.ts` — `GET /api/me/today`, `GET /api/me/timer`, `POST /api/jobs/:id/timer/start`,
 `POST /api/me/timer/pause`, `POST /api/me/timer/stop` {book, note}, `GET /api/lookup?code=`, `GET /api/assets/:id/common-parts`.
 Migration `006-job-timers.sql`. Not yet: photos/voice notes on jobs (needs document storage, phase 2), printing QR labels, offline queueing of changes.
+
+## Notifications — built 2026-11-27
+
+In-app bell (desktop header, mobile `/m/notifications`) plus Web Push to phones and browsers, per person.
+Push is implemented with Node crypto only (`server/notify/webpush.ts`: VAPID ES256 + aes128gcm, tested in `script/push.test.ts`);
+the VAPID key pair is generated on first use and kept in `app_settings` (or set `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_JWK` / `VAPID_SUBJECT`).
+
+| Kind | Who | Default | Trigger |
+|---|---|---|---|
+| New fault requests | Lead+ | on | Request submitted (portal or mobile) |
+| New jobs with nobody assigned | Lead+ | on | Job created without an assignee (manual, follow-up) |
+| Jobs assigned to me | everyone | on | Job created or converted with an assignee, or reassigned |
+| Updates on my requests | everyone | on | Request converted to a job, or rejected (matched by requester name) |
+| Daily stock summary | everyone | on for Lead+ | 07:00 UK daily, only if parts are out (≤0) or at/below minimum |
+
+Nobody is notified about their own action. Settings: Settings page and the mobile Me page (in-app and push per kind, devices list, test).
+Tables (migration `007-notifications.sql`): `notifications`, `push_subscriptions`, `notification_runs` (once-a-day guard), `app_settings`, `users.notify_prefs`.
+Read notifications older than 90 days are deleted. `NOTIFY_SCHEDULER=off` disables the daily run. Managers can send the stock summary now: `POST /api/notifications/stock-summary/send`.
+iPhone push needs iOS 16.4+ and the app added to the Home Screen.

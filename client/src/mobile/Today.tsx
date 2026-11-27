@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { LogoIcon } from "@/components/Logo";
+import { MobileBell } from "./Notifications";
 import { cn } from "@/lib/utils";
 import { Card, Chip, Icon, Screen, Segments, Spinner, enc, fmtDate, fmtClock, fmtHours, priorityTone, statusTone, useTimer, useTimerSeconds } from "./ui";
 
@@ -63,9 +64,12 @@ export default function Today() {
     <Screen header={
       <header className="bg-[#102A45] text-white flex items-center justify-between pl-4 pr-2 pt-[max(8px,env(safe-area-inset-top))] pb-1">
         <div className="flex items-center gap-2.5"><LogoIcon className="size-8" /><span className="font-bold text-[17px]">myCMMS</span></div>
-        <button type="button" aria-label="Refresh" onClick={() => refetch()} className="size-11 flex items-center justify-center rounded-lg active:bg-white/10">
-          <Icon name="refresh" className={cn("size-5", isFetching && "animate-spin")} />
-        </button>
+        <div className="flex items-center">
+          <button type="button" aria-label="Refresh" onClick={() => refetch()} className="size-11 flex items-center justify-center rounded-lg active:bg-white/10">
+            <Icon name="refresh" className={cn("size-5", isFetching && "animate-spin")} />
+          </button>
+          <MobileBell />
+        </div>
       </header>
     }>
       <div className="bg-[#102A45] text-white px-5 pt-2 pb-14">

@@ -11,6 +11,7 @@ import {
 import type { z } from "zod";
 import type { labourEntrySchema, jobNoteSchema, followUpJobSchema } from "@shared/schema";
 import { nextNumber } from "../numbering";
+import { onJobCreated } from "../notify";
 
 export class JobError extends Error {
   constructor(message: string, public status = 400) {
@@ -149,7 +150,7 @@ export async function addNote(companyId: number, jobId: string, input: z.infer<t
 /** Turns a follow-up recommendation into a new job, linked both ways. */
 export async function createFollowUpJob(companyId: number, jobId: string, noteId: number, input: z.infer<typeof followUpJobSchema>, actor: JobActor) {
   if (!isLead(actor.role)) throw new JobError("Only a Lead, Manager or Admin can raise follow-up jobs.", 403);
-  return db.transaction(async (tx) => {
+  const created = await db.transaction(async (tx) => {
     const source = await getJobOr404(tx, companyId, jobId);
     const [note] = await tx.select().from(jobNotes)
       .where(and(eq(jobNotes.companyId, companyId), eq(jobNotes.jobId, jobId), eq(jobNotes.id, noteId)))
@@ -169,6 +170,8 @@ export async function createFollowUpJob(companyId: number, jobId: string, noteId
     await tx.insert(jobNotes).values({ companyId, jobId: id, kind: "Note", text: `Raised as a follow-up from ${jobId}.`, userName: actor.name });
     return job;
   });
+  onJobCreated(companyId, created, actor.id);
+  return created;
 }
 
 /** Time entries for the signed-in person (or anyone, for Leads+) between two dates. */

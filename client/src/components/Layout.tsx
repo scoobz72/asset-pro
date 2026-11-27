@@ -38,6 +38,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState } from "react";
 import { LogoIcon } from "@/components/Logo";
 import { GlobalSearch } from "@/components/GlobalSearch";
+import { NotificationBell } from "@/components/NotificationBell";
 import { useCurrentUser, useLogout, PLATFORM_ADMIN_ROLE } from "@/hooks/use-auth";
 
 const baseNavigation = [
@@ -151,10 +152,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="flex items-center gap-2 md:gap-4">
-            <Button variant="ghost" size="icon" className="relative">
-              <Bell className="size-5 text-muted-foreground" />
-              <span className="absolute top-2 right-2 size-2 bg-destructive rounded-full border-2 border-card" />
-            </Button>
+            <NotificationBell />
             
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

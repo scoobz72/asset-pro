@@ -1,10 +1,12 @@
+import { useEffect } from "react";
 import Layout from "@/components/Layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { User, Shield, Loader2 } from "lucide-react";
+import { User, Shield, Loader2, Bell } from "lucide-react";
+import { NotificationSettings } from "@/components/NotificationSettings";
 import { useCurrentUser, PRIVILEGED_ROLES } from "@/hooks/use-auth";
 import DataImport from "@/components/DataImport";
 
@@ -25,6 +27,11 @@ export default function Settings({
       description: "Your profile preferences have been updated.",
     });
   };
+
+  // Arriving from the bell's settings button: jump to Notifications.
+  useEffect(() => {
+    if (window.location.hash === "#notifications") setTimeout(() => document.getElementById("notifications")?.scrollIntoView({ behavior: "smooth" }), 100);
+  }, []);
 
   return (
     <Layout>
@@ -97,6 +104,13 @@ export default function Settings({
         </div>
 
         <div className="space-y-6">
+          <Card id="notifications" className="scroll-mt-20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Bell className="size-5" /> Notifications</CardTitle>
+              <CardDescription>New requests, jobs assigned to you, and the daily stock summary: in the app, and as alerts on your phone or computer.</CardDescription>
+            </CardHeader>
+            <CardContent><NotificationSettings /></CardContent>
+          </Card>
           {canImport && <DataImport />}
         </div>
       </div>

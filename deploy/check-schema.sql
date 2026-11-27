@@ -31,3 +31,8 @@ SELECT id, job_id, kind, text, user_name, created_at, follow_up_job_id FROM job_
 SELECT id, user_id, effective_from, mon, tue, wed, thu, fri, sat, sun FROM shift_patterns LIMIT 0;
 SELECT id, user_id, start_date, end_date, hours_per_day, reason FROM absences LIMIT 0;
 SELECT user_id, job_id, started_at, accumulated_seconds, work_date, company_id FROM job_timers LIMIT 0;
+SELECT id, user_id, kind, title, body, link, created_at, read_at, company_id FROM notifications LIMIT 0;
+SELECT id, user_id, endpoint, p256dh, auth, user_agent, created_at, last_ok_at, company_id FROM push_subscriptions LIMIT 0;
+SELECT notify_prefs FROM users LIMIT 0;
+SELECT company_id, kind, run_date, ran_at FROM notification_runs LIMIT 0;
+SELECT key, value, updated_at FROM app_settings LIMIT 0;

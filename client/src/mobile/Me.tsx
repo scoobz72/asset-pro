@@ -7,6 +7,7 @@ import { LogoIcon } from "@/components/Logo";
 import { cn } from "@/lib/utils";
 import { Btn, Card, Chip, Empty, Icon, Screen, Spinner, TopBar, enc, patch, refreshMobile, useRun } from "./ui";
 import type { MyDay } from "./Today";
+import { NotificationSettings } from "@/components/NotificationSettings";
 
 /* --------------------------------------------------------------- audit walk-round */
 
@@ -110,8 +111,14 @@ export function MePage() {
           </Card>
         )}
 
+        <Card>
+          <h2 className="text-[15px] font-bold mb-3">Notifications</h2>
+          <NotificationSettings compact />
+        </Card>
+
         <Card className="p-0 overflow-hidden">
           {[
+            { href: "/m/notifications", icon: "inbox", label: "Notifications" },
             { href: "/m/requests", icon: "inbox", label: "My requests" },
             { href: "/m/stock", icon: "box", label: "Stock" },
             { href: "/", icon: "desktop", label: "Full site (reports, calendar, purchasing)" },
