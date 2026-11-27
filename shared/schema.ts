@@ -275,6 +275,21 @@ export const jobLabour = pgTable("job_labour", {
   index("job_labour_job_idx").on(t.companyId, t.jobId),
 ]);
 
+/** The mobile app's job timer: at most one per engineer. started_at is null while paused. */
+export const jobTimers = pgTable("job_timers", {
+  userId: integer("user_id").notNull(),
+  jobId: text("job_id").notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  accumulatedSeconds: integer("accumulated_seconds").notNull().default(0),
+  workDate: date("work_date").notNull(),
+  companyId: companyId(),
+}, (t) => [
+  primaryKey({ name: "job_timers_pkey", columns: [t.companyId, t.userId] }),
+  foreignKey({ name: "job_timers_user_fk", columns: [t.companyId, t.userId], foreignColumns: [users.companyId, users.id] }).onDelete("cascade"),
+  foreignKey({ name: "job_timers_job_fk", columns: [t.companyId, t.jobId], foreignColumns: [jobs.companyId, jobs.id] }).onDelete("cascade"),
+]);
+export type JobTimer = typeof jobTimers.$inferSelect;
+
 /** Notes on a job, and follow-up recommendations that can become new jobs. */
 export const jobNotes = pgTable("job_notes", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),

@@ -282,3 +282,25 @@ Also done alongside (26 Nov 2026):
   signed-in person can action. Each item can be actioned from its day (start or complete
   a job, triage a request, open an audit or PO). Overdue items are listed above the month,
   and each layer can be switched on or off. PPM schedules (1.3) will appear here once built.
+
+## Mobile app (/m) — built 2026-11-27
+
+A phone app inside the same site, installable to the home screen (PWA: `client/public/manifest.webmanifest`, `sw.js`).
+Same sign-in, data and permissions as the full site. Screens (`client/src/mobile/`):
+
+| Screen | What it does |
+|---|---|
+| Today `/m` | My open jobs and audits (Today / Overdue / All), today's utilisation ring, week hours, running timer |
+| Job `/m/job/:id` | Start/pause timer (one per engineer, kept on the server, survives closing the app), stop and book to the quarter hour or discard, quick +15/+30/+60 min, other hours, time list, parts issued with return, notes and follow-up recommendations, POs, take an unassigned job, complete with closing note (stops and books the timer first), reopen |
+| Scan `/m/scan` | Camera scanning via the browser's BarcodeDetector (Chrome/Android: QR, Code 128/39, EAN, Data Matrix), torch, type-a-code fallback; resolves asset ID/serial, part ID/maker's no., bin, job, PO; QR labels holding `https://mycmms.co.uk/m/asset/<id>` open straight from the iPhone camera |
+| Asset `/m/asset/:id` | Status, criticality, open jobs, parts often fitted, details, report fault, audit "It's here / Not here" |
+| Stock `/m/stock`, `/m/part/:id`, `/m/bin/:id` | Search, low-stock filter, part detail, issue to one of my jobs or return, bin contents |
+| Issue part `/m/issue/:jobId` | Parts often used on the job's asset first, search, quantity, stock-after and below-minimum warning, FIFO cost |
+| Report fault `/m/report` | Asset (from scan or search, warns of existing open jobs), title, urgency, line stopped (forces High), area, detail (keyboard dictation) |
+| Requests `/m/requests` | Leads+: triage (make job with type/priority/assignee/due, or reject with reason); everyone: my requests and outcomes |
+| Audit `/m/audit` | Walk-round progress for an area audit, scan next, tick off |
+| Me `/m/me` | Week hours and utilisation, install button/instructions, full-site link, sign out |
+
+Server: `server/mobile.ts` — `GET /api/me/today`, `GET /api/me/timer`, `POST /api/jobs/:id/timer/start`,
+`POST /api/me/timer/pause`, `POST /api/me/timer/stop` {book, note}, `GET /api/lookup?code=`, `GET /api/assets/:id/common-parts`.
+Migration `006-job-timers.sql`. Not yet: photos/voice notes on jobs (needs document storage, phase 2), printing QR labels, offline queueing of changes.

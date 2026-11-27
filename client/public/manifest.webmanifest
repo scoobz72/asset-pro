@@ -1,0 +1,20 @@
+{
+  "name": "myCMMS",
+  "short_name": "myCMMS",
+  "description": "Maintenance jobs, time, parts and fault reports on the shop floor.",
+  "start_url": "/m",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#102A45",
+  "theme_color": "#102A45",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Scan a tag", "url": "/m/scan", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Report a fault", "url": "/m/report", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

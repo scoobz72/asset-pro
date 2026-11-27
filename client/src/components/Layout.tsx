@@ -9,6 +9,7 @@ import {
   Calendar as CalendarIcon, 
   BarChart3, 
   Settings,
+  Smartphone,
   Menu,
   Bell,
   Search,
@@ -94,7 +95,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <div className="p-4 border-t border-sidebar-border">
+        <div className="p-4 border-t border-sidebar-border space-y-1">
+          <Link href="/m" className="flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground">
+            <Smartphone className="size-4" />
+            Mobile app
+          </Link>
           <Link href="/settings">
             <a className={cn(
               "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"

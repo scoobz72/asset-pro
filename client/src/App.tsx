@@ -29,6 +29,8 @@ import StockTake from "@/pages/stock-take";
 import Landing from "@/pages/landing";
 import Companies from "@/pages/companies";
 import { PLATFORM_ADMIN_ROLE } from "@/hooks/use-auth";
+import MobileApp from "@/mobile/MobileApp";
+import { MobileBanner } from "@/components/MobileBanner";
 
 function Router({ defaultLandingPage, setDefaultLandingPage, isPlatformAdmin }: any) {
   return (
@@ -67,10 +69,12 @@ function AppContent() {
   const { data: currentUser, isLoading: authLoading } = useCurrentUser();
   const isAuthenticated = !!currentUser;
   const [defaultLandingPage, setDefaultLandingPage] = useState("/");
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
+  const isMobileApp = location === "/m" || location.startsWith("/m/");
 
   const handleLogin = () => {
-    setLocation(defaultLandingPage);
+    // Signing in from the phone app (or a QR label link) returns to where you were.
+    setLocation(isMobileApp ? location : defaultLandingPage);
   };
 
   return (
@@ -80,6 +84,8 @@ function AppContent() {
           <div className="min-h-screen flex items-center justify-center text-muted-foreground">
             Loading...
           </div>
+        ) : !isAuthenticated && isMobileApp ? (
+          <Auth onLogin={handleLogin} />
         ) : !isAuthenticated ? (
           <Switch>
             <Route path="/login">
@@ -92,8 +98,11 @@ function AppContent() {
               <Landing />
             </Route>
           </Switch>
+        ) : isMobileApp ? (
+          <MobileApp />
         ) : (
           <>
+            <MobileBanner />
             <div className="bg-primary text-primary-foreground text-xs py-1.5 px-4 flex justify-between items-center z-50 relative">
               <span className="font-semibold" data-testid="text-company-name">{currentUser?.companyName}</span>
               {currentUser?.role === PLATFORM_ADMIN_ROLE && (

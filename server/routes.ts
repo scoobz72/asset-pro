@@ -10,6 +10,7 @@ import { getJobDetail, addLabour, deleteLabour, addNote, createFollowUpJob, JobE
 import { getShifts, savePattern, deletePattern, addAbsence, deleteAbsence, ShiftError } from "./people/shifts";
 import { engineeringKpis } from "./kpi/kpis";
 import { scheduleAreaAudit, scheduleAuditSchema, AuditError } from "./audits";
+import { myDay, getTimer, startTimer, pauseTimer, stopTimer, timerStopSchema, lookupCode, commonPartsForAsset } from "./mobile";
 import { jobs as jobsTable, assetAudits as assetAuditsTable } from "@shared/schema";
 import { recordMovementNow, recordStockTake, StockError, ukToday } from "./stock/ledger";
 import {
@@ -629,6 +630,26 @@ export async function registerRoutes(
     });
     res.status(201).json(audit);
   });
+  // ---- Mobile app (/m): the engineer's day, the job timer, scan look-ups.
+  app.get("/api/me/today", async (req, res) => { res.json(await myDay(companyOf(req), actorOf(req))); });
+  app.get("/api/me/timer", async (req, res) => { res.json(await getTimer(companyOf(req), req.user!.id)); });
+  app.post("/api/jobs/:id/timer/start", domainErrors(async (req, res) => {
+    res.json(await startTimer(companyOf(req), String(req.params.id), actorOf(req)));
+  }));
+  app.post("/api/me/timer/pause", domainErrors(async (req, res) => { res.json(await pauseTimer(companyOf(req), actorOf(req))); }));
+  app.post("/api/me/timer/stop", domainErrors(async (req, res) => {
+    const data = parseBody(timerStopSchema, req, res);
+    if (!data) return;
+    res.json(await stopTimer(companyOf(req), actorOf(req), data));
+  }));
+  app.get("/api/lookup", async (req, res) => {
+    const code = String(req.query.code ?? "").slice(0, 200);
+    res.json(await lookupCode(companyOf(req), code, actorOf(req)));
+  });
+  app.get("/api/assets/:id/common-parts", async (req, res) => {
+    res.json(await commonPartsForAsset(companyOf(req), String(req.params.id)));
+  });
+
   // An area audit: one audit per asset at the location, for one auditor on one date.
   app.post("/api/audits/schedule", domainErrors(async (req, res) => {
     const data = parseBody(scheduleAuditSchema, req, res);
