@@ -2,7 +2,7 @@
  * Endpoints behind the mobile app (/m): the engineer's day, the job timer, scan look-ups
  * and the parts usually fitted to an asset. Every query is scoped to the company.
  */
-import { and, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "./db";
 import {
@@ -118,7 +118,7 @@ export async function stopTimer(companyId: number, actor: Actor, input: z.infer<
 export async function myDay(companyId: number, actor: Actor) {
   const today = ukToday();
   const monday = weekStart(today);
-  const [myJobs, myLabour, pats, offs, audits, newRequests, timer] = await Promise.all([
+  const [myJobs, myLabour, pats, offs, audits, newRequests, timer, unassigned] = await Promise.all([
     db.select({
       id: jobs.id, title: jobs.title, status: jobs.status, priority: jobs.priority, type: jobs.type,
       dueDate: jobs.dueDate, assetId: jobs.assetId, assetName: assets.name, locationName: locations.name,
@@ -137,6 +137,14 @@ export async function myDay(companyId: number, actor: Actor) {
         .where(and(eq(maintenanceRequests.companyId, companyId), eq(maintenanceRequests.status, "Submitted")))
       : Promise.resolve([{ n: 0 }]),
     getTimer(companyId, actor.id),
+    // Open jobs nobody has, so an engineer with a quiet day can pick one up.
+    db.select({
+      id: jobs.id, title: jobs.title, status: jobs.status, priority: jobs.priority, type: jobs.type,
+      dueDate: jobs.dueDate, assetId: jobs.assetId, assetName: assets.name,
+    }).from(jobs)
+      .leftJoin(assets, and(eq(assets.companyId, jobs.companyId), eq(assets.id, jobs.assetId)))
+      .where(and(eq(jobs.companyId, companyId), isNull(jobs.assigneeId), ne(jobs.status, "Completed")))
+      .orderBy(desc(jobs.createdAt)).limit(10),
   ]);
 
   const patterns: Pattern[] = pats.map((x) => ({ effectiveFrom: x.effectiveFrom, mon: +x.mon, tue: +x.tue, wed: +x.wed, thu: +x.thu, fri: +x.fri, sat: +x.sat, sun: +x.sun }));
@@ -168,6 +176,7 @@ export async function myDay(companyId: number, actor: Actor) {
       hasShifts: patterns.length > 0,
     },
     newRequests: newRequests[0]?.n ?? 0,
+    unassigned: unassigned.sort((a, b) => (order[a.priority] ?? 9) - (order[b.priority] ?? 9)),
   };
 }
 

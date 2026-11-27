@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { LogoIcon } from "@/components/Logo";
 import { cn } from "@/lib/utils";
-import { Card, Chip, Empty, Icon, Screen, Segments, Spinner, enc, fmtDate, fmtClock, fmtHours, priorityTone, statusTone, useTimer, useTimerSeconds } from "./ui";
+import { Card, Chip, Icon, Screen, Segments, Spinner, enc, fmtDate, fmtClock, fmtHours, priorityTone, statusTone, useTimer, useTimerSeconds } from "./ui";
 
 export type MyDay = {
   today: string; name: string; role: string;
@@ -11,6 +11,7 @@ export type MyDay = {
   audits: { key: string; date: string | null; location: string | null; auditIds: string[]; assetIds: string[]; overdue: boolean }[];
   hours: { today: { booked: number; planned: number; available: number }; week: { booked: number; available: number; from: string }; hasShifts: boolean };
   newRequests: number;
+  unassigned: { id: string; title: string; status: string; priority: string; type: string | null; dueDate: string | null; assetId: string | null; assetName: string | null }[];
 };
 
 function Ring({ value }: { value: number | null }) {
@@ -55,28 +56,33 @@ export default function Today() {
   const date = new Date(`${day.today}T12:00:00`).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
   const count = shown.jobs.length + shown.audits.length;
 
+  const todo = lists.today.jobs.length + lists.today.audits.length;
+  const first = day.name.split(" ")[0];
+
   return (
     <Screen header={
-      <header className="bg-[#102A45] text-white px-5 pt-[max(16px,env(safe-area-inset-top))] pb-16">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5"><LogoIcon className="size-8" /><span className="font-bold text-[17px]">myCMMS</span></div>
-          <button type="button" aria-label="Refresh" onClick={() => refetch()} className="size-11 flex items-center justify-center rounded-lg active:bg-white/10">
-            <Icon name="refresh" className={cn("size-5", isFetching && "animate-spin")} />
-          </button>
-        </div>
-        <p className="mt-3 text-sm text-[#C7D3E0]">{date}</p>
-        <h1 className="text-2xl font-bold mt-0.5">{greeting()} {day.name.split(" ")[0]}, {lists.today.jobs.length + lists.today.audits.length} to do today</h1>
+      <header className="bg-[#102A45] text-white flex items-center justify-between pl-4 pr-2 pt-[max(8px,env(safe-area-inset-top))] pb-1">
+        <div className="flex items-center gap-2.5"><LogoIcon className="size-8" /><span className="font-bold text-[17px]">myCMMS</span></div>
+        <button type="button" aria-label="Refresh" onClick={() => refetch()} className="size-11 flex items-center justify-center rounded-lg active:bg-white/10">
+          <Icon name="refresh" className={cn("size-5", isFetching && "animate-spin")} />
+        </button>
       </header>
     }>
-      <div className="-mt-12 px-4 pb-6 flex flex-col gap-3">
+      <div className="bg-[#102A45] text-white px-5 pt-2 pb-14">
+        <p className="text-sm text-[#C7D3E0]">{date} · {greeting()} {first}</p>
+        <h1 className="text-[22px] font-bold leading-tight mt-1">{todo === 0 ? "Nothing due today" : `${todo} to do today`}</h1>
+      </div>
+      <div className="relative -mt-10 px-4 pb-6 flex flex-col gap-3">
         <Card className="flex items-center gap-3.5 py-3.5">
-          <Ring value={util} />
+          {day.hours.hasShifts ? <Ring value={util} /> : (
+            <span className="size-14 shrink-0 rounded-full bg-[#F4F6F9] flex items-center justify-center text-[#4B5E73]"><Icon name="clock" className="size-6" /></span>
+          )}
           <div className="flex-1 min-w-0">
-            <p className="font-semibold">{fmtHours(day.hours.today.booked)} booked{day.hours.today.available > 0 ? ` of ${fmtHours(day.hours.today.available)} shift` : " today"}</p>
-            <p className="text-[13px] text-[#4B5E73]">
-              {day.hours.today.planned} planned · {Math.round((day.hours.today.booked - day.hours.today.planned) * 100) / 100} reactive · week {day.hours.week.booked}{day.hours.week.available ? ` / ${day.hours.week.available}` : ""} h
+            <p className="font-semibold leading-snug">{fmtHours(day.hours.today.booked)} booked today{day.hours.today.available > 0 ? ` of ${fmtHours(day.hours.today.available)}` : ""}</p>
+            <p className="text-[13px] text-[#4B5E73] leading-snug">
+              {day.hours.today.booked > 0 ? `${day.hours.today.planned} planned · ${Math.round((day.hours.today.booked - day.hours.today.planned) * 100) / 100} reactive · ` : ""}{day.hours.week.booked} h this week
             </p>
-            {!day.hours.hasShifts && <p className="text-xs text-[#78350F] mt-0.5">No shift pattern set yet. Ask your manager.</p>}
+            {!day.hours.hasShifts && <p className="text-xs text-[#92400E] mt-0.5 leading-snug">No shift hours set yet, so utilisation can't show. A manager sets them on the Team page.</p>}
           </div>
         </Card>
 
@@ -88,6 +94,26 @@ export default function Today() {
           </Link>
         )}
 
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { href: "/m/scan", icon: "scan", label: "Scan tag", tone: "text-[#102A45]" },
+            { href: "/m/report", icon: "alert", label: "Report fault", tone: "text-[#B45309]" },
+            { href: "/m/stock", icon: "box", label: "Find part", tone: "text-[#1D4ED8]" },
+          ].map((a) => (
+            <Link key={a.href} href={a.href} className="bg-white rounded-2xl min-h-[72px] flex flex-col items-center justify-center gap-1.5 text-[13px] font-semibold shadow-[0_1px_3px_rgba(16,42,69,0.08)] active:bg-[#F9FAFB]">
+              <Icon name={a.icon} className={cn("size-6", a.tone)} />{a.label}
+            </Link>
+          ))}
+        </div>
+
+        {day.newRequests > 0 && (
+          <Link href="/m/requests" className="bg-white rounded-2xl px-4 py-3 flex items-center gap-3 border-2 border-[#F59E0B]">
+            <Icon name="inbox" className="text-[#B45309]" />
+            <span className="flex-1 text-sm"><strong>{day.newRequests} request{day.newRequests === 1 ? "" : "s"}</strong> waiting for triage</span>
+            <Icon name="back" className="rotate-180 size-4 text-[#9AAABB]" />
+          </Link>
+        )}
+
         <Segments value={filter} onChange={setFilter} options={[
           { value: "today", label: `Today ${lists.today.jobs.length + lists.today.audits.length}` },
           { value: "overdue", label: `Overdue ${lists.overdue.jobs.length + lists.overdue.audits.length}` },
@@ -95,9 +121,10 @@ export default function Today() {
         ]} />
 
         {count === 0 && (
-          <Empty icon="check" title={filter === "overdue" ? "Nothing overdue" : "Nothing assigned to you"}>
-            Scan an asset to report a fault, or check Requests.
-          </Empty>
+          <div className="bg-white/60 rounded-2xl px-4 py-5 flex items-center gap-3 text-sm text-[#4B5E73]">
+            <span className="size-10 rounded-xl bg-[#DCFCE7] text-[#166534] flex items-center justify-center shrink-0"><Icon name="check" strokeWidth={2.6} /></span>
+            <span>{filter === "overdue" ? "Nothing overdue. Nice work." : filter === "all" ? "No open jobs or audits are assigned to you." : "Nothing assigned to you for today."}</span>
+          </div>
         )}
 
         {shown.jobs.map((j) => (
@@ -125,6 +152,22 @@ export default function Today() {
             <p className="text-[13px] text-[#4B5E73]">Scan each asset tag to confirm it's where it should be</p>
           </Link>
         ))}
+
+        {day.unassigned.length > 0 && (
+          <>
+            <h2 className="text-[13px] font-semibold text-[#4B5E73] mt-2">Open jobs nobody has ({day.unassigned.length})</h2>
+            {day.unassigned.map((j) => (
+              <Link key={j.id} href={`/m/job/${enc(j.id)}`} className="bg-white rounded-2xl px-4 py-3 flex items-center gap-3 active:bg-[#F9FAFB]">
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2 text-xs"><span className="font-mono text-[#4B5E73]">{j.id}</span><Chip tone={j.type === "Planned" ? "blue" : priorityTone(j.priority)}>{j.priority}</Chip></span>
+                  <span className="block font-semibold truncate mt-0.5">{j.title}</span>
+                  {(j.assetName || j.assetId) && <span className="block text-xs text-[#4B5E73] truncate">{j.assetName ?? j.assetId}</span>}
+                </span>
+                <span className="text-sm font-semibold text-[#1D4ED8] shrink-0">Take</span>
+              </Link>
+            ))}
+          </>
+        )}
       </div>
     </Screen>
   );
